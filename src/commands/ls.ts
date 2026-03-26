@@ -6,6 +6,7 @@ export default class Ls extends Command {
   static description = 'List running and stopped sandbox containers'
 
   async run(): Promise<void> {
+    await this.parse(Ls)
     const docker = new SandboxDocker()
     const containers = await docker.listContainers()
 

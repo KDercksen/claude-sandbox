@@ -39,6 +39,7 @@
   "files": [
     "./bin",
     "./dist",
+    "./docker",
     "./oclif.manifest.json"
   ],
   "homepage": "https://github.com/tmp/claude-sandbox",
