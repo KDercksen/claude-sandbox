@@ -1,1 +1,1 @@
-{"root":["./src/index.ts"],"version":"5.9.3"}
+{"root":["./src/index.ts","./src/lib/config.ts","./src/lib/container-name.ts","./src/lib/prompt-builder.ts","./src/lib/ssh.ts"],"version":"5.9.3"}

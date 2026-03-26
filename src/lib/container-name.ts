@@ -7,7 +7,7 @@ function sanitize(input: string): string {
     .toLowerCase()
     .replaceAll(/[^a-z0-9-]/g, '-')
     .replaceAll(/-+/g, '-')
-    .replace(/^-|-$/g, '')
+    .replaceAll(/^-|-$/g, '')
 }
 
 export function generateContainerName(repo: string, name?: string): string {

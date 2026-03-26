@@ -4,7 +4,7 @@ import {mkdtemp, readFile, rm} from 'node:fs/promises'
 import {tmpdir} from 'node:os'
 import {join} from 'node:path'
 
-import {loadConfig, saveConfig, type SandboxConfig} from '../../src/lib/config.js'
+import {loadConfig, type SandboxConfig, saveConfig} from '../../src/lib/config.js'
 
 describe('config', () => {
   let tempDir: string
@@ -14,7 +14,7 @@ describe('config', () => {
   })
 
   afterEach(async () => {
-    await rm(tempDir, {recursive: true, force: true})
+    await rm(tempDir, {force: true, recursive: true})
   })
 
   it('returns defaults when no config file exists', async () => {
@@ -28,12 +28,12 @@ describe('config', () => {
   it('loads config from file', async () => {
     const configPath = join(tempDir, 'config.json')
     const data: SandboxConfig = {
-      image: 'my-image:v2',
-      sshPortRange: [3000, 3099] as [number, number],
       defaultBranchPrefix: 'bot/',
       githubPat: 'github_pat_test123',
+      image: 'my-image:v2',
+      sshPortRange: [3000, 3099] as [number, number],
     }
-    const {writeFile, mkdir} = await import('node:fs/promises')
+    const {writeFile} = await import('node:fs/promises')
     await writeFile(configPath, JSON.stringify(data))
 
     const config = await loadConfig(tempDir)
@@ -44,13 +44,13 @@ describe('config', () => {
 
   it('saves config to file', async () => {
     const config: SandboxConfig = {
+      defaultBranchPrefix: 'dev/',
       image: 'claude-sandbox:dev',
       sshPortRange: [4000, 4099] as [number, number],
-      defaultBranchPrefix: 'dev/',
     }
     await saveConfig(tempDir, config)
 
-    const raw = await readFile(join(tempDir, 'config.json'), 'utf-8')
+    const raw = await readFile(join(tempDir, 'config.json'), 'utf8')
     const saved = JSON.parse(raw)
     expect(saved.image).to.equal('claude-sandbox:dev')
   })

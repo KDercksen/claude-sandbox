@@ -4,16 +4,16 @@ import {homedir} from 'node:os'
 import {join} from 'node:path'
 
 export interface SandboxConfig {
+  defaultBranchPrefix: string
   githubPat?: string
   image: string
   sshPortRange: [number, number]
-  defaultBranchPrefix: string
 }
 
 const DEFAULTS: SandboxConfig = {
+  defaultBranchPrefix: 'claude/',
   image: 'claude-sandbox:latest',
   sshPortRange: [2200, 2299],
-  defaultBranchPrefix: 'claude/',
 }
 
 export function getConfigDir(): string {
@@ -25,7 +25,7 @@ export async function loadConfig(configDir?: string): Promise<SandboxConfig> {
   const configPath = join(dir, 'config.json')
 
   try {
-    const raw = await readFile(configPath, 'utf-8')
+    const raw = await readFile(configPath, 'utf8')
     const partial = JSON.parse(raw) as Partial<SandboxConfig>
     return {...DEFAULTS, ...partial}
   } catch {

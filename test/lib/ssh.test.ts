@@ -13,7 +13,7 @@ describe('ssh', () => {
   })
 
   afterEach(async () => {
-    await rm(tempDir, {recursive: true, force: true})
+    await rm(tempDir, {force: true, recursive: true})
   })
 
   it('generates a new keypair when none exists', async () => {
@@ -25,16 +25,16 @@ describe('ssh', () => {
     const privStat = await stat(keys.privateKeyPath)
     expect(privStat.isFile()).to.be.true
 
-    const pubContent = await readFile(keys.publicKeyPath, 'utf-8')
+    const pubContent = await readFile(keys.publicKeyPath, 'utf8')
     expect(pubContent).to.include('ssh-ed25519')
   })
 
   it('reuses existing keypair on subsequent calls', async () => {
     const first = await ensureSSHKeyPair(tempDir)
-    const firstPub = await readFile(first.publicKeyPath, 'utf-8')
+    const firstPub = await readFile(first.publicKeyPath, 'utf8')
 
     const second = await ensureSSHKeyPair(tempDir)
-    const secondPub = await readFile(second.publicKeyPath, 'utf-8')
+    const secondPub = await readFile(second.publicKeyPath, 'utf8')
 
     expect(firstPub).to.equal(secondPub)
   })
