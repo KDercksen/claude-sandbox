@@ -15,14 +15,15 @@ Delegate GitHub issues, PRs, or freeform tasks to sandboxed Claude agents that w
 
 As a Claude Code plugin:
 
-```bash
-claude /install-plugin /path/to/claude-sandbox
+```
+/plugin marketplace add KDercksen/claude-sandbox
+/plugin install claude-sandbox@KDercksen-claude-sandbox
 ```
 
-Or for CLI usage:
+Or for standalone CLI usage:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/KDercksen/claude-sandbox.git
 cd claude-sandbox
 npm install
 npm run build
