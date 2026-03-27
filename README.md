@@ -13,11 +13,10 @@ Delegate GitHub issues, PRs, or freeform tasks to sandboxed Claude agents that w
 
 ## Install
 
-As a Claude Code plugin — add the marketplace, then install the plugin:
+As a Claude Code plugin — add the marketplace, then install from the `/plugin` CLI within Claude Code:
 
 ```
 /plugin marketplace add KDercksen/claude-sandbox
-/plugin install claude-sandbox@claude-sandbox
 ```
 
 Or for standalone CLI usage:
