@@ -491,7 +491,7 @@ cmd_attach() {
     -o UserKnownHostsFile=/dev/null \
     -o IdentitiesOnly=yes \
     -o LogLevel=ERROR \
-    claude@localhost -t "tmux attach -t claude"
+    claude@localhost
 }
 
 cmd_stop() {
