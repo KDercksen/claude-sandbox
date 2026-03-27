@@ -38,6 +38,7 @@ export default class Attach extends Command {
       '-p', String(container.sshPort),
       '-o', 'StrictHostKeyChecking=no',
       '-o', 'UserKnownHostsFile=/dev/null',
+      '-o', 'IdentitiesOnly=yes',
       '-o', 'LogLevel=ERROR',
       'claude@localhost',
       '-t', 'tmux attach -t claude',
