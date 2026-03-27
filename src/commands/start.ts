@@ -69,11 +69,12 @@ export default class Start extends Command {
       repo: flags.repo,
     })
 
+    const bin = `${this.config.root}/bin/claude-sandbox`
     this.log('')
     this.log(`Container started: ${result.containerName}`)
     this.log(`  Repo:     ${result.repo}`)
     this.log(`  SSH port: ${result.sshPort}`)
-    this.log(`  Attach:   claude-sandbox attach ${result.containerName}`)
-    this.log(`  Logs:     claude-sandbox logs ${result.containerName}`)
+    this.log(`  Attach:   ${bin} attach ${result.containerName}`)
+    this.log(`  Logs:     ${bin} logs ${result.containerName}`)
   }
 }
