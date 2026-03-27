@@ -299,6 +299,7 @@ cmd_run() {
   local repo="" prompt="" branch="" name="" create_pr="false"
   local -a issues=()
   local -a prs=()
+  local -a extra_domains=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -309,6 +310,7 @@ cmd_run() {
       -b|--branch) branch="${2:?--branch requires a value}"; shift 2 ;;
       --name) name="${2:?--name requires a value}"; shift 2 ;;
       --create-pr) create_pr="true"; shift ;;
+      --allow-domain) extra_domains+=("${2:?--allow-domain requires a value}"); shift 2 ;;
       -*) die "Unknown flag: $1" ;;
       *) die "Unexpected argument: $1" ;;
     esac
@@ -342,6 +344,11 @@ cmd_run() {
 
   load_config
 
+  local extra_domains_str=""
+  if [[ ${#extra_domains[@]} -gt 0 ]]; then
+    extra_domains_str=$(IFS=,; echo "${extra_domains[*]}")
+  fi
+
   echo "Spawning ${#target_types[@]} container$([ ${#target_types[@]} -gt 1 ] && echo s)..."
 
   local -a spawned_names=()
@@ -360,7 +367,7 @@ cmd_run() {
     esac
 
     local result
-    if result=$(spawn_container "$repo" "$t_prompt" "$t_issue" "$t_pr" "$create_pr" "$branch" "$name" ""); then
+    if result=$(spawn_container "$repo" "$t_prompt" "$t_issue" "$t_pr" "$create_pr" "$branch" "$name" "$extra_domains_str"); then
       local container_name repo_out ssh_port branch_out
       IFS=$'\t' read -r container_name repo_out ssh_port branch_out <<< "$result"
       spawned_names+=("$container_name")
