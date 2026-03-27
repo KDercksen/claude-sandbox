@@ -28,7 +28,7 @@ if [ -n "${BRANCH:-}" ]; then
     REMOTE_SHA=$(git rev-parse "origin/${BRANCH}" 2>/dev/null || echo "none")
     if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
         echo '@@UPDATE("Pushing unpushed changes")' >> /workspace/.claude-progress
-        git push -u origin "${BRANCH}" 2>&1 || echo "WARNING: push failed"
+        git push -u origin "${BRANCH}" 2>&1 || echo '@@UPDATE("WARNING: push failed")' >> /workspace/.claude-progress
     fi
 fi
 
