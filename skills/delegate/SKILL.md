@@ -12,7 +12,7 @@ Use this skill when the user asks you to run work in a sandbox, or when you reco
 ## Prerequisites
 
 Before launching, verify:
-1. **Plugin installed:** Run `claude-sandbox --help` (see CLI Reference below). If it fails, tell user: "Plugin dependencies may not be installed. Try restarting Claude Code or running `npm install --production` in the plugin directory."
+1. **Plugin installed:** Run `claude-sandbox --help` (see CLI Reference below). If it fails, tell user: "Plugin not found. Try restarting Claude Code or check that the plugin is installed."
 2. **Git repo:** Run `git remote get-url origin` in the current working directory. If it fails, tell the user: "Not in a git repository with a remote. Navigate to a repo first."
 3. **Docker running:** If the start command fails with a Docker connection error, suggest checking that Docker is running.
 
@@ -78,6 +78,7 @@ For each monitor instruction, launch a background subagent:
 ```
 Agent tool:
   description: "Monitor container <containerName>"
+  model: "sonnet"
   run_in_background: true
   prompt: <the prompt field from the JSON>
 ```
@@ -94,23 +95,6 @@ When a monitor subagent reports completion and asks "keep or clean up?":
 
 - **Clean up:** Run `claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox stop <name> && claude-sandbox rm <name>`
 - **Keep:** Do nothing — container stays running for inspection via `attach`
-
-## Fallback: Manual Monitoring
-
-If subagent monitoring fails or isn't available, fall back to manual polling:
-
-```bash
-claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox logs <name>
-```
-
-Poll every ~30 seconds. Look for:
-
-| Log pattern | Meaning | Action |
-|-------------|---------|--------|
-| `=== Claude exited with code 0 ===` | Success | Report success, include branch/PR info |
-| `=== Claude exited with code` (non-zero) | Failure | Report failure, suggest `attach` to inspect |
-| `Creating pull request...` | PR was created | Capture and report the PR URL |
-| Claude appears to be asking a question | Needs input | Alert user to `attach` |
 
 ## Error Handling
 
