@@ -217,16 +217,19 @@ build_monitor_prompt() {
 Monitor the Docker container "${container_name}" (repo: ${repo}).
 
 IMPORTANT: Always run ONE Bash call at a time. Never make parallel Bash calls.
+Keep commands simple — no sh -c, no pipes, no subshells, no quoted arguments.
 
 Your job:
-1. Every 10 seconds, poll the container with a SINGLE command that checks both files:
-   docker exec ${container_name} sh -c 'echo "---PROGRESS---"; cat /workspace/.claude-progress 2>/dev/null; echo "---DONE---"; cat /workspace/.claude-done 2>/dev/null || echo "NOT_DONE"'
-2. Parse the output for three marker types in the PROGRESS section:
+1. Every 10 seconds, poll progress by running:
+   docker exec ${container_name} cat /workspace/.claude-progress
+2. Parse the output for three marker types:
    - @@PHASE("name") — a phase transition. Report as: **Phase: name**
    - @@UPDATE("detail") — a progress update. Report as a bullet point under the current phase.
    - @@ARTIFACT("type: description") — a concrete output. Collect these for the completion summary.
 3. Relay only NEW lines you have not already reported. Skip duplicates.
-4. Check the DONE section: if it contains a number (not "NOT_DONE"), Claude is done. The number is the exit code.
+4. After reading progress, check for completion by running:
+   docker exec ${container_name} cat /workspace/.claude-done
+   If this succeeds, Claude is done. The output is the exit code. If it fails, Claude is still working.
 5. On completion, report:
    - Exit code (0 = success)
    - Phase history (list of phases traversed)
