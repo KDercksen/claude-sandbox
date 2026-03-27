@@ -1,0 +1,23 @@
+{
+  "name": "claude-sandbox",
+  "owner": {
+    "name": "KDercksen"
+  },
+  "metadata": {
+    "description": "Run Claude Code in isolated Docker containers"
+  },
+  "plugins": [
+    {
+      "name": "claude-sandbox",
+      "source": ".",
+      "description": "Run Claude Code in isolated Docker containers — delegate GitHub issues, PRs, or freeform tasks to sandboxed autonomous agents",
+      "version": "0.1.0",
+      "author": {
+        "name": "KDercksen"
+      },
+      "repository": "https://github.com/KDercksen/claude-sandbox",
+      "license": "MIT",
+      "keywords": ["sandbox", "docker", "isolation", "delegation", "autonomous"]
+    }
+  ]
+}
