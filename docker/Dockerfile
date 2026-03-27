@@ -26,7 +26,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Create claude user
 RUN useradd -m -s /bin/bash -G sudo claude \
-  && echo "claude ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/claude \
+  && echo "claude ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/sbin/sshd, /usr/bin/cp, /usr/bin/chown, /usr/sbin/iptables, /usr/sbin/ipset" > /etc/sudoers.d/claude \
   && chmod 0440 /etc/sudoers.d/claude
 
 # SSH server setup
@@ -52,9 +52,6 @@ RUN chmod +x /usr/local/bin/init-firewall.sh \
   /usr/local/bin/entrypoint.sh \
   /usr/local/bin/claude-wrapper.sh
 
-# Restrict firewall script to sudo only
-RUN echo "claude ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/claude-firewall \
-  && chmod 0440 /etc/sudoers.d/claude-firewall
 
 WORKDIR /workspace
 USER claude
