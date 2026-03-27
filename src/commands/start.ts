@@ -28,6 +28,10 @@ export default class Start extends Command {
       char: 'i',
       description: 'GitHub issue number to fetch as context',
     }),
+    'allow-domain': Flags.string({
+      description: 'Extra domain to allow through the container firewall (repeatable)',
+      multiple: true,
+    }),
     name: Flags.string({
       description: 'Container name (auto-generated if omitted)',
     }),
@@ -85,11 +89,18 @@ export default class Start extends Command {
 
     this.log(`Starting container ${containerName}...`)
 
+    // Combine config and flag allowed domains (additive)
+    const extraAllowedDomains = [
+      ...config.allowedDomains,
+      ...(flags['allow-domain'] ?? []),
+    ]
+
     const info = await docker.createAndStartContainer({
       branch,
       claudeConfigDir: join(homedir(), '.claude'),
       claudeConfigFile: join(homedir(), '.claude.json'),
       createPr: flags['create-pr'],
+      extraAllowedDomains,
       githubToken,
       image: config.image,
       name: containerName,
