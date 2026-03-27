@@ -44,7 +44,7 @@ Minimal and punchy:
 - **Quick start** — build image, start sandbox, attach, check logs
 - **Commands** — brief table of all 7 commands with one-line descriptions
 - **Configuration** — mention `~/.claude-sandbox/config.json`, list key options
-- **License** — TBD
+- **License** — MIT
 
 No architecture deep-dives or security details — those live in docs/.
 
