@@ -16,27 +16,21 @@ set -e
 echo ""
 echo "=== Claude exited with code ${EXIT_CODE} ==="
 
-# Stage and commit any uncommitted changes
+# Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
-    echo "Committing remaining changes..."
+    echo "WARNING: Found uncommitted changes, committing..."
     git add -A
     git commit -m "claude-sandbox: uncommitted changes from session" || true
 fi
 
-# Push if we have a branch
+# Safety net: push if branch exists but wasn't pushed
 if [ -n "${BRANCH:-}" ]; then
-    echo "Pushing branch ${BRANCH}..."
-    git push -u origin "${BRANCH}" 2>&1 || echo "WARNING: push failed"
-fi
-
-# Create PR if requested
-if [ "${CREATE_PR:-false}" = "true" ] && [ -n "${BRANCH:-}" ]; then
-    echo "Creating pull request..."
-    gh pr create \
-      --title "Claude Sandbox: ${BRANCH}" \
-      --body "Automated PR created by claude-sandbox." \
-      --head "${BRANCH}" \
-      2>&1 || echo "WARNING: PR creation failed"
+    LOCAL_SHA=$(git rev-parse HEAD)
+    REMOTE_SHA=$(git rev-parse "origin/${BRANCH}" 2>/dev/null || echo "none")
+    if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+        echo "Pushing unpushed changes on ${BRANCH}..."
+        git push -u origin "${BRANCH}" 2>&1 || echo "WARNING: push failed"
+    fi
 fi
 
 # Write completion marker

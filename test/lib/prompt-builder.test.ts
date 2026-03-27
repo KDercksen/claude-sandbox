@@ -23,7 +23,8 @@ const fakeExec = async (cmd: string, args: string[]): Promise<string> => {
 describe('prompt-builder', () => {
   it('uses prompt directly when only --prompt given', async () => {
     const result = await buildPrompt({prompt: 'Fix the bug', repo: 'org/repo'}, fakeExec)
-    expect(result).to.equal('Fix the bug')
+    expect(result).to.include('Fix the bug')
+    expect(result).to.include('Git workflow')
   })
 
   it('builds prompt from issue when --issue given', async () => {

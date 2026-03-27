@@ -62,7 +62,7 @@ export default class Start extends Command {
       pr: flags.pr,
       prompt: flags.prompt,
       repo: flags.repo,
-    })
+    }, undefined, {createPr: flags['create-pr']})
 
     // Resolve GitHub token
     const githubToken = await this.resolveGitHubToken(config.githubPat)

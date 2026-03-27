@@ -27,7 +27,11 @@ async function fetchPR(repo: string, pr: number, exec: ExecFn): Promise<{body: s
   return JSON.parse(raw)
 }
 
-export async function buildPrompt(source: PromptSource, exec: ExecFn = defaultExec): Promise<string> {
+export interface PromptOptions {
+  createPr?: boolean
+}
+
+export async function buildPrompt(source: PromptSource, exec: ExecFn = defaultExec, options: PromptOptions = {}): Promise<string> {
   const parts: string[] = []
 
   if (source.prompt) {
@@ -57,5 +61,25 @@ export async function buildPrompt(source: PromptSource, exec: ExecFn = defaultEx
     parts.unshift('Resolve the following. Make the necessary code changes, ensure tests pass, and commit your work.')
   }
 
+  parts.push(gitWorkflowInstructions(options.createPr ?? false))
+
   return parts.join('\n')
+}
+
+function gitWorkflowInstructions(createPr: boolean): string {
+  const lines = [
+    '',
+    '---',
+    '## Git workflow',
+    '',
+    '- Make small, focused commits as you go — one per logical change. Use descriptive commit messages.',
+  ]
+
+  if (createPr) {
+    lines.push('- When you are done, push your branch and create a PR with a clear title and description summarizing what changed and why.')
+  } else {
+    lines.push('- When you are done, commit your work. The branch will be pushed automatically.')
+  }
+
+  return lines.join('\n')
 }
