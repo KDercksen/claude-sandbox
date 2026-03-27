@@ -2,7 +2,7 @@
 *-error.log
 **/.DS_Store
 /.idea
-# /dist — committed so the Claude Code plugin works without a build step
+/dist
 /tmp
 /node_modules
 oclif.manifest.json
