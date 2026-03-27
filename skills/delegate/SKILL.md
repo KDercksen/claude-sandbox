@@ -12,15 +12,24 @@ Use this skill when the user asks you to run work in a sandbox, or when you reco
 ## Prerequisites
 
 Before launching, verify:
-1. **Plugin installed:** Run `${CLAUDE_PLUGIN_ROOT}/bin/run.js --help`. If it fails, tell user: "Plugin dependencies may not be installed. Try restarting Claude Code or running `npm install --production` in the plugin directory."
+1. **Plugin installed:** Run `claude-sandbox --help` (see CLI Reference below). If it fails, tell user: "Plugin dependencies may not be installed. Try restarting Claude Code or running `npm install --production` in the plugin directory."
 2. **Git repo:** Run `git remote get-url origin` in the current working directory. If it fails, tell the user: "Not in a git repository with a remote. Navigate to a repo first."
 3. **Docker running:** If the start command fails with a Docker connection error, suggest checking that Docker is running.
 
 ## CLI Reference
 
-All CLI commands are run via:
+To keep displayed commands clean, define a shell function in each Bash tool call:
+
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/run.js <command> [flags]
+claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }
+```
+
+Then invoke commands as `claude-sandbox <command> [flags]`. Always set the Bash tool `description` to a short, human-readable form (e.g., `claude-sandbox run --repo org/repo`) so the user sees a clean invocation instead of the full plugin path.
+
+Example Bash tool call:
+```
+description: "claude-sandbox run --repo org/repo --issue 42"
+command: claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox run --repo org/repo --issue 42
 ```
 
 ## Step 1: Parse Intent
@@ -52,7 +61,7 @@ Strip any trailing `.git`.
 Use the `run` command which handles concurrent spawning and outputs monitor subagent instructions:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/run.js run --repo <org/repo> [--issue N ...] [--pr N ...] [--prompt "..."] [--create-pr] [--name <name>]
+claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox run --repo <org/repo> [--issue N ...] [--pr N ...] [--prompt "..."] [--create-pr] [--name <name>]
 ```
 
 Rules:
@@ -83,7 +92,7 @@ The monitor subagent will:
 
 When a monitor subagent reports completion and asks "keep or clean up?":
 
-- **Clean up:** Run `${CLAUDE_PLUGIN_ROOT}/bin/run.js stop <name> && ${CLAUDE_PLUGIN_ROOT}/bin/run.js rm <name>`
+- **Clean up:** Run `claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox stop <name> && claude-sandbox rm <name>`
 - **Keep:** Do nothing — container stays running for inspection via `attach`
 
 ## Fallback: Manual Monitoring
@@ -91,7 +100,7 @@ When a monitor subagent reports completion and asks "keep or clean up?":
 If subagent monitoring fails or isn't available, fall back to manual polling:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/run.js logs <name>
+claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox logs <name>
 ```
 
 Poll every ~30 seconds. Look for:

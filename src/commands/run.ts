@@ -101,10 +101,11 @@ export default class Run extends Command {
     // Print monitoring instructions
     this.log('')
     this.log('Containers are running. Monitor subagents will report milestones.')
+    const bin = `${this.config.root}/bin/claude-sandbox`
     this.log('You can also use these commands manually:')
     for (const s of spawned) {
-      this.log(`  logs:   claude-sandbox logs ${s.containerName}`)
-      this.log(`  attach: claude-sandbox attach ${s.containerName}`)
+      this.log(`  logs:   ${bin} logs ${s.containerName}`)
+      this.log(`  attach: ${bin} attach ${s.containerName}`)
     }
 
     // Print subagent launch instructions for Claude Code
@@ -116,6 +117,7 @@ export default class Run extends Command {
   }
 
   private buildMonitorPrompt(result: SpawnResult): {containerName: string; prompt: string} {
+    const bin = `${this.config.root}/bin/claude-sandbox`
     return {
       containerName: result.containerName,
       prompt: [
@@ -123,7 +125,7 @@ export default class Run extends Command {
         '',
         'Your job:',
         '1. Every 10 seconds, capture the tmux output by running:',
-        `   claude-sandbox logs ${result.containerName}`,
+        `   ${bin} logs ${result.containerName}`,
         '2. Read the output and identify milestone events:',
         '   - Repository cloned',
         '   - Tests running / passing / failing',
@@ -144,7 +146,7 @@ export default class Run extends Command {
         '- If a command fails, retry up to 3 consecutive times before reporting a problem.',
         '- A single successful poll resets the failure counter.',
         '',
-        'For cleanup, run: claude-sandbox stop <name> && claude-sandbox rm <name>',
+        `For cleanup, run: ${bin} stop <name> && ${bin} rm <name>`,
       ].join('\n'),
     }
   }
