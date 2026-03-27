@@ -1,0 +1,65 @@
+# claude-sandbox
+
+Run Claude Code in isolated, network-hardened Docker containers.
+
+Delegate GitHub issues, PRs, or freeform tasks to sandboxed Claude agents that work autonomously with full permissions — safely.
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/)
+- Node.js >= 18
+- [Claude Code](https://www.npmjs.com/package/@anthropic-ai/claude-code) (`@anthropic-ai/claude-code`)
+- [`gh` CLI](https://cli.github.com/) (for issue/PR context fetching)
+
+## Install
+
+As a Claude Code plugin:
+
+```bash
+claude /install-plugin /path/to/claude-sandbox
+```
+
+Or for CLI usage:
+
+```bash
+git clone <repo-url>
+cd claude-sandbox
+npm install
+npm run build
+```
+
+## Quick start
+
+```bash
+# Build the Docker image
+./bin/run.js build
+
+# Start a sandbox with a GitHub issue
+./bin/run.js start --repo owner/repo --issue 42 --create-pr
+
+# Monitor output
+./bin/run.js logs -f claude-sandbox-repo-abc123
+
+# Attach to the container
+./bin/run.js attach claude-sandbox-repo-abc123
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `build` | Build or rebuild the Docker image |
+| `start` | Launch a new sandbox container |
+| `ls` | List sandbox containers |
+| `attach` | SSH into a container and attach to tmux |
+| `logs` | Show tmux pane output (`-f` to follow) |
+| `stop` | Stop a container (keeps it for inspection) |
+| `rm` | Remove a container |
+
+## Configuration
+
+Config lives at `~/.claude-sandbox/config.json`. Key options: `image`, `sshPortRange`, `defaultBranchPrefix`, `githubPat`. See `docs/configuration.md` for full reference.
+
+## License
+
+MIT
