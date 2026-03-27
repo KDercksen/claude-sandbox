@@ -21,7 +21,7 @@ Before launching, verify:
 To keep displayed commands clean, define a shell function in each Bash tool call:
 
 ```bash
-claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }
+claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }
 ```
 
 Then invoke commands as `claude-sandbox <command> [flags]`. Always set the Bash tool `description` to a short, human-readable form (e.g., `claude-sandbox run --repo org/repo`) so the user sees a clean invocation instead of the full plugin path.
@@ -29,7 +29,7 @@ Then invoke commands as `claude-sandbox <command> [flags]`. Always set the Bash 
 Example Bash tool call:
 ```
 description: "claude-sandbox run --repo org/repo --issue 42"
-command: claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox run --repo org/repo --issue 42
+command: claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox run --repo org/repo --issue 42
 ```
 
 ## Step 1: Parse Intent
@@ -61,7 +61,7 @@ Strip any trailing `.git`.
 Use the `run` command which handles concurrent spawning and outputs monitor subagent instructions:
 
 ```bash
-claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox run --repo <org/repo> [--issue N ...] [--pr N ...] [--prompt "..."] [--create-pr] [--name <name>]
+claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox run --repo <org/repo> [--issue N ...] [--pr N ...] [--prompt "..."] [--create-pr] [--name <name>]
 ```
 
 Rules:
@@ -92,7 +92,7 @@ The monitor subagent will:
 
 When a monitor subagent reports completion and asks "keep or clean up?":
 
-- **Clean up:** Run `claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox stop <name> && claude-sandbox rm <name>`
+- **Clean up:** Run `claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox stop <name> && claude-sandbox rm <name>`
 - **Keep:** Do nothing — container stays running for inspection via `attach`
 
 ## Fallback: Manual Monitoring
@@ -100,7 +100,7 @@ When a monitor subagent reports completion and asks "keep or clean up?":
 If subagent monitoring fails or isn't available, fall back to manual polling:
 
 ```bash
-claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/bin/claude-sandbox" "$@"; }; claude-sandbox logs <name>
+claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox logs <name>
 ```
 
 Poll every ~30 seconds. Look for:

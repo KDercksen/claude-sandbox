@@ -1,14 +1,3 @@
 {
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"${CLAUDE_PLUGIN_ROOT}\" && { [ -d node_modules ] && [ -d dist ] && diff -q package.json \"${CLAUDE_PLUGIN_DATA}/package.json.stamp\" >/dev/null 2>&1; } || { npm install && npm run build && cp package.json \"${CLAUDE_PLUGIN_DATA}/package.json.stamp\"; }"
-          }
-        ]
-      }
-    ]
-  }
+  "hooks": {}
 }
