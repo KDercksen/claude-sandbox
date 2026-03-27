@@ -112,7 +112,7 @@ build_prompt() {
 
   # Progress update instructions
   local progress
-  progress=$'\n---\n## Progress updates\n\nAs you work, write progress updates to /workspace/.claude-progress by appending lines in this format:\n@@UPDATE("brief description of what you just did or are about to do")\n\nWrite an update after each significant milestone: setting up the workspace, running tests, making commits, creating PRs, encountering errors, etc. These updates are monitored by an external process to track your progress.'
+  progress=$'\n---\n## Progress updates\n\nAs you work, append progress lines to /workspace/.claude-progress using these markers:\n\n@@PHASE("name") — emit when you transition to a new phase of work. Suggested phases:\n  exploring codebase, setting up environment, brainstorming design, writing tests,\n  implementing, debugging, reviewing, creating pr\n\n@@UPDATE("detail") — emit after each significant action. Include what you did,\n  what skill or approach you are using, and any subagents you spawned. Examples:\n    @@UPDATE("Using TDD — writing failing tests for auth module")\n    @@UPDATE("Spawned 3 subagents for parallel implementation")\n    @@UPDATE("All 8 tests passing, moving to integration tests")\n    @@UPDATE("Installing npm dependencies — found package.json with 12 deps")\n\n@@ARTIFACT("type: description") — emit when you produce a concrete output.\n  Types: commit, pr, file, test. Examples:\n    @@ARTIFACT("commit: Add failing tests for user authentication")\n    @@ARTIFACT("pr: https://github.com/org/repo/pull/42")\n    @@ARTIFACT("test: 8 passing, 0 failing")\n\nStart with @@PHASE("exploring codebase") as your first line. Update phases as your work evolves.'
   parts+=("$progress")
 
   local IFS=$'\n'
@@ -191,14 +191,19 @@ Monitor the Docker container "${container_name}" (repo: ${repo}).
 Your job:
 1. Every 10 seconds, check for progress updates by running:
    docker exec ${container_name} cat /workspace/.claude-progress 2>/dev/null
-2. Look for @@UPDATE lines. Relay any NEW updates to the user that you have not already reported. Skip duplicates.
-3. Also check for completion by running:
+2. Parse the output for three marker types:
+   - @@PHASE("name") — a phase transition. Report as: **Phase: name**
+   - @@UPDATE("detail") — a progress update. Report as a bullet point under the current phase.
+   - @@ARTIFACT("type: description") — a concrete output. Collect these for the completion summary.
+3. Relay only NEW lines you have not already reported. Skip duplicates.
+4. Also check for completion by running:
    docker exec ${container_name} cat /workspace/.claude-done 2>/dev/null
    If this command succeeds, Claude is done. The file contains the exit code.
-4. On completion, report:
+5. On completion, report:
    - Exit code (0 = success)
-   - Summary of all updates
-   - PR URL if one was mentioned in any update
+   - Phase history (list of phases traversed)
+   - All artifacts produced (commits, PRs, test results)
+   - Brief summary of the work done
    Then ask the user: "Keep or clean up this container?"
 
 Error handling:

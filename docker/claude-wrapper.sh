@@ -4,7 +4,7 @@ set -euo pipefail
 cd /workspace
 
 # Write start marker
-echo '@@UPDATE("Claude session starting")' >> /workspace/.claude-progress
+echo '@@PHASE("starting")' >> /workspace/.claude-progress
 
 # Run Claude in headless mode
 set +e
@@ -12,14 +12,17 @@ claude -p --dangerously-skip-permissions "${PROMPT}"
 EXIT_CODE=$?
 set -e
 
-# Write completion marker
-echo "@@UPDATE(\"Claude exited with code ${EXIT_CODE}\")" >> /workspace/.claude-progress
+# Write completion phase
+echo '@@PHASE("finishing")' >> /workspace/.claude-progress
+echo "@@ARTIFACT(\"exit: ${EXIT_CODE}\")" >> /workspace/.claude-progress
 
 # Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
     echo '@@UPDATE("Committing leftover uncommitted changes")' >> /workspace/.claude-progress
     git add -A
-    git commit -m "claude-sandbox: uncommitted changes from session" || true
+    COMMIT_MSG="claude-sandbox: uncommitted changes from session"
+    git commit -m "$COMMIT_MSG" || true
+    echo "@@ARTIFACT(\"commit: ${COMMIT_MSG}\")" >> /workspace/.claude-progress
 fi
 
 # Safety net: push if branch exists but wasn't pushed
