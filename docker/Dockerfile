@@ -29,11 +29,8 @@ RUN useradd -m -s /bin/bash -G sudo claude \
 RUN mkdir -p /workspace /home/claude/.claude \
   && chown -R claude:claude /workspace /home/claude/.claude
 
-# Install Claude Code (as claude user so it goes in ~claude/.claude/)
-USER claude
-RUN curl -fsSL https://claude.ai/install.sh | bash
-USER root
-ENV PATH="/home/claude/.claude/local/bin:${PATH}"
+# Install Claude Code
+RUN npm install -g @anthropic-ai/claude-code
 
 # Copy scripts
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
