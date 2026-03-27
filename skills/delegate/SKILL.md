@@ -1,5 +1,5 @@
 ---
-name: claude-sandbox:delegate
+name: delegate
 description: Delegate work to an isolated sandbox container — launch Claude in Docker to autonomously work on GitHub issues, PRs, or freeform tasks, then monitor progress and report back
 ---
 
@@ -12,9 +12,18 @@ Use this skill when the user asks you to run work in a sandbox, or when you reco
 ## Prerequisites
 
 Before launching, verify:
-1. **CLI available:** Run `which claude-sandbox`. If not found, tell the user: "claude-sandbox CLI is not on PATH. Build it with `npm run build` in the claude-sandbox project directory."
+1. **Plugin installed:** Run `node ${CLAUDE_PLUGIN_ROOT}/bin/run.js --help`. If it fails, something is wrong with the plugin installation.
 2. **Git repo:** Run `git remote get-url origin` in the current working directory. If it fails, tell the user: "Not in a git repository with a remote. Navigate to a repo first."
 3. **Docker running:** If the start command fails with a Docker connection error, suggest checking that Docker is running.
+
+## CLI Reference
+
+All CLI commands are run via:
+```bash
+node ${CLAUDE_PLUGIN_ROOT}/bin/run.js <command> [flags]
+```
+
+Set `NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules` in the environment for all commands so dependencies resolve correctly.
 
 ## Step 1: Parse Intent
 
@@ -44,7 +53,7 @@ Strip any trailing `.git`.
 
 Construct and run the command:
 ```bash
-claude-sandbox start --repo <org/repo> [--issue N | --pr N | --prompt "..."] [--create-pr] [--name <name>]
+NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${CLAUDE_PLUGIN_ROOT}/bin/run.js start --repo <org/repo> [--issue N | --pr N | --prompt "..."] [--create-pr] [--name <name>]
 ```
 
 Rules:
@@ -54,7 +63,7 @@ Rules:
 
 After each successful launch, **always** print:
 ```
-To SSH into the container: claude-sandbox attach <name>
+To SSH into the container: NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${CLAUDE_PLUGIN_ROOT}/bin/run.js attach <name>
 ```
 
 ## Step 4: Monitor
@@ -62,7 +71,7 @@ To SSH into the container: claude-sandbox attach <name>
 After launching, poll for completion. Use a background Bash command or periodic checks:
 
 ```bash
-claude-sandbox logs <name>
+NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${CLAUDE_PLUGIN_ROOT}/bin/run.js logs <name>
 ```
 
 **What to look for:**
@@ -75,11 +84,11 @@ claude-sandbox logs <name>
 | `Creating pull request...` | PR was created | Capture and report the PR URL |
 | `WARNING: push failed` | Push failed | Alert user |
 | `WARNING: PR creation failed` | PR creation failed | Alert user |
-| Claude appears to be asking a question or waiting | Needs input | Alert user: "The sandbox appears to need input. Run `claude-sandbox attach <name>` to interact." |
+| Claude appears to be asking a question or waiting | Needs input | Alert user: "The sandbox appears to need input. Attach to interact." |
 
 **Polling cadence:**
 - Check every ~30 seconds
-- If the container is no longer running (check `claude-sandbox ls`), stop polling and report final status
+- If the container is no longer running (check `ls` command), stop polling and report final status
 
 **For multiple sandboxes:** Track and poll each independently. Report status as each finishes.
 
@@ -90,12 +99,12 @@ When a sandbox completes, summarize:
 - Branch name (from logs)
 - PR link if one was created
 - Any warnings from the logs
-- Remind user they can inspect with `claude-sandbox attach <name>` if needed
+- Remind user they can inspect with the `attach` command if needed
 
 ## Error Handling
 
 - **No git remote:** Stop and tell the user. Do not guess repos.
-- **CLI not found:** Tell user to install/build claude-sandbox.
+- **Plugin broken:** Tell user to check plugin installation.
 - **Container fails to start:** Show the full CLI error output. Suggest `docker ps` to check Docker.
-- **Container stops unexpectedly:** Report and suggest `claude-sandbox logs <name>` and `claude-sandbox attach <name>`.
-- **Polling fails:** If `claude-sandbox logs` fails (e.g., container removed), stop polling and report.
+- **Container stops unexpectedly:** Report and suggest using `logs` and `attach` commands.
+- **Polling fails:** If logs fail (e.g., container removed), stop polling and report.

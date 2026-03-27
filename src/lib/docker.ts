@@ -19,6 +19,7 @@ export interface ContainerInfo {
 export interface CreateContainerOpts {
   branch?: string
   claudeConfigDir: string
+  claudeConfigFile: string
   createPr: boolean
   githubToken: string
   image: string
@@ -71,7 +72,8 @@ export class SandboxDocker {
       ExposedPorts: {'22/tcp': {}},
       HostConfig: {
         Binds: [
-          `${opts.claudeConfigDir}:/home/claude/.claude:ro`,
+          `${opts.claudeConfigDir}:/home/claude/.claude.host:ro`,
+          `${opts.claudeConfigFile}:/home/claude/.claude.json.host:ro`,
           `${opts.sshPublicKeyPath}:/home/claude/.ssh/authorized_keys:ro`,
         ],
         CapAdd: ['NET_ADMIN', 'NET_RAW'],

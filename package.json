@@ -40,6 +40,9 @@
     "./bin",
     "./dist",
     "./docker",
+    "./.claude-plugin",
+    "./skills",
+    "./hooks",
     "./oclif.manifest.json"
   ],
   "homepage": "https://github.com/tmp/claude-sandbox",

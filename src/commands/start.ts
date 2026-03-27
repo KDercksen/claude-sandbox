@@ -88,6 +88,7 @@ export default class Start extends Command {
     const info = await docker.createAndStartContainer({
       branch,
       claudeConfigDir: join(homedir(), '.claude'),
+      claudeConfigFile: join(homedir(), '.claude.json'),
       createPr: flags['create-pr'],
       githubToken,
       image: config.image,
