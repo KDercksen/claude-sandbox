@@ -74,11 +74,11 @@ Rules:
 
 After a successful `run` command, parse the JSON monitor instructions from the output (lines after `--- MONITOR SUBAGENT INSTRUCTIONS ---`). Each line is a JSON object with `containerName` and `prompt` fields.
 
-For each monitor instruction, launch a background subagent:
+For each monitor instruction, launch a background subagent using the `sandbox-monitor` agent type:
 ```
 Agent tool:
   description: "Monitor container <containerName>"
-  model: "sonnet"
+  subagent_type: "claude-sandbox:sandbox-monitor"
   run_in_background: true
   prompt: <the prompt field from the JSON>
 ```
