@@ -1,0 +1,555 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_DIR="$HOME/.claude-sandbox"
+CONFIG_FILE="$CONFIG_DIR/config.json"
+
+# --- Utilities ---
+
+die() { echo "error: $*" >&2; exit 1; }
+warn() { echo "warning: $*" >&2; }
+
+# --- Config ---
+
+CONFIG_IMAGE="claude-sandbox:latest"
+CONFIG_PORT_MIN=2200
+CONFIG_PORT_MAX=2299
+CONFIG_BRANCH_PREFIX="claude/"
+CONFIG_GITHUB_PAT=""
+CONFIG_ALLOWED_DOMAINS=""
+
+load_config() {
+  if [[ -f "$CONFIG_FILE" ]]; then
+    CONFIG_IMAGE=$(jq -r '.image // "claude-sandbox:latest"' "$CONFIG_FILE")
+    CONFIG_PORT_MIN=$(jq -r '.sshPortRange[0] // 2200' "$CONFIG_FILE")
+    CONFIG_PORT_MAX=$(jq -r '.sshPortRange[1] // 2299' "$CONFIG_FILE")
+    CONFIG_BRANCH_PREFIX=$(jq -r '.defaultBranchPrefix // "claude/"' "$CONFIG_FILE")
+    CONFIG_GITHUB_PAT=$(jq -r '.githubPat // empty' "$CONFIG_FILE")
+    CONFIG_ALLOWED_DOMAINS=$(jq -r '(.allowedDomains // []) | join(",")' "$CONFIG_FILE")
+  fi
+}
+
+# --- GitHub Token ---
+
+resolve_github_token() {
+  if [[ -n "$CONFIG_GITHUB_PAT" ]]; then
+    echo "$CONFIG_GITHUB_PAT"
+    return
+  fi
+  local token
+  token=$(gh auth token 2>/dev/null) || true
+  token="${token%$'\n'}"
+  if [[ -n "$token" ]]; then
+    echo "$token"
+    return
+  fi
+  die 'No GitHub token found. Set githubPat in config or run "gh auth login".'
+}
+
+# --- SSH ---
+
+ensure_ssh_keypair() {
+  local ssh_dir="$CONFIG_DIR/ssh"
+  local private_key="$ssh_dir/id_ed25519"
+  local public_key="$ssh_dir/id_ed25519.pub"
+  if [[ -f "$private_key" && -f "$public_key" ]]; then
+    return
+  fi
+  mkdir -p "$ssh_dir"
+  ssh-keygen -t ed25519 -f "$private_key" -N '' -C claude-sandbox >/dev/null 2>&1
+}
+
+# --- Container Names ---
+
+sanitize_name() {
+  echo "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g; s/-\+/-/g; s/^-//; s/-$//'
+}
+
+generate_container_name() {
+  local repo="$1" name="${2:-}"
+  if [[ -n "$name" ]]; then
+    echo "claude-sandbox-$(sanitize_name "$name")"
+  else
+    local repo_name="${repo##*/}"
+    local suffix
+    suffix=$(head -c3 /dev/urandom | xxd -p)
+    echo "claude-sandbox-$(sanitize_name "$repo_name")-$suffix"
+  fi
+}
+
+# --- Port Finding ---
+
+find_free_port() {
+  local min="$1" max="$2"
+  local used_ports
+  used_ports=$(ss -tlnH 2>/dev/null | awk '{print $4}' | grep -oE '[0-9]+$' | sort -u)
+  local candidates=()
+  for ((p=min; p<=max; p++)); do candidates+=("$p"); done
+  candidates=($(shuf -e "${candidates[@]}"))
+  for port in "${candidates[@]}"; do
+    if ! echo "$used_ports" | grep -qx "$port"; then
+      echo "$port"
+      return
+    fi
+  done
+  die "No free port in range $min-$max"
+}
+
+# --- Prompt Building ---
+
+build_prompt() {
+  local repo="$1" prompt="${2:-}" issue="${3:-}" pr="${4:-}" create_pr="${5:-false}"
+  local parts=()
+
+  if [[ -n "$prompt" ]]; then
+    parts+=("$prompt")
+  fi
+
+  if [[ -n "$issue" ]]; then
+    local data title body
+    data=$(gh issue view "$issue" --repo "$repo" --json title,body) || die "Failed to fetch issue #$issue"
+    title=$(echo "$data" | jq -r .title)
+    body=$(echo "$data" | jq -r .body)
+    parts+=($'\n---\n'"GitHub Issue #${issue}:"$'\n\n'"# ${title}"$'\n\n'"${body}")
+  fi
+
+  if [[ -n "$pr" ]]; then
+    local data title body
+    data=$(gh pr view "$pr" --repo "$repo" --json title,body) || die "Failed to fetch PR #$pr"
+    title=$(echo "$data" | jq -r .title)
+    body=$(echo "$data" | jq -r .body)
+    parts+=($'\n---\n'"GitHub PR #${pr}:"$'\n\n'"# ${title}"$'\n\n'"${body}")
+  fi
+
+  if [[ ${#parts[@]} -eq 0 ]]; then
+    die "Prompt required: provide at least one of --prompt, --issue, or --pr"
+  fi
+
+  # Default instruction if no explicit prompt
+  if [[ -z "$prompt" ]]; then
+    parts=("Resolve the following. Make the necessary code changes, ensure tests pass, and commit your work." "${parts[@]}")
+  fi
+
+  # Git workflow instructions
+  local workflow
+  workflow=$'\n---\n## Git workflow\n\n- Make small, focused commits as you go — one per logical change. Use descriptive commit messages.'
+  if [[ "$create_pr" == "true" ]]; then
+    workflow+=$'\n- When you are done, push your branch and create a PR with a clear title and description summarizing what changed and why.'
+  else
+    workflow+=$'\n- When you are done, commit your work. The branch will be pushed automatically.'
+  fi
+  parts+=("$workflow")
+
+  local IFS=$'\n'
+  echo "${parts[*]}"
+}
+
+# --- Spawn Container ---
+
+spawn_container() {
+  local repo="$1" prompt="${2:-}" issue="${3:-}" pr="${4:-}" create_pr="${5:-false}"
+  local branch="${6:-}" name="${7:-}" extra_domains="${8:-}"
+
+  local full_prompt
+  full_prompt=$(build_prompt "$repo" "$prompt" "$issue" "$pr" "$create_pr")
+
+  ensure_ssh_keypair
+
+  local container_name
+  container_name=$(generate_container_name "$repo" "$name")
+
+  # Resolve branch
+  if [[ -z "$branch" && "$create_pr" == "true" ]]; then
+    branch="${CONFIG_BRANCH_PREFIX}${container_name}"
+  fi
+
+  local ssh_port
+  ssh_port=$(find_free_port "$CONFIG_PORT_MIN" "$CONFIG_PORT_MAX")
+
+  # Merge config allowed domains with extra domains
+  local all_domains="$CONFIG_ALLOWED_DOMAINS"
+  if [[ -n "$extra_domains" ]]; then
+    if [[ -n "$all_domains" ]]; then
+      all_domains="${all_domains},${extra_domains}"
+    else
+      all_domains="$extra_domains"
+    fi
+  fi
+
+  local github_token
+  github_token=$(resolve_github_token)
+
+  # Build docker run args
+  local -a docker_args=(
+    run -d
+    --name "$container_name"
+    --label "app=claude-sandbox"
+    --label "claude-sandbox.repo=$repo"
+    --label "claude-sandbox.ssh-port=$ssh_port"
+    --cap-add NET_ADMIN
+    --cap-add NET_RAW
+    -p "${ssh_port}:22"
+    -v "${HOME}/.claude:/home/claude/.claude.host:ro"
+    -v "${HOME}/.claude.json:/home/claude/.claude.json.host:ro"
+    -v "${CONFIG_DIR}/ssh/id_ed25519.pub:/home/claude/.ssh/authorized_keys:ro"
+    -e "REPO=${repo}"
+    -e "PROMPT=${full_prompt}"
+    -e "GITHUB_TOKEN=${github_token}"
+    -e "CREATE_PR=${create_pr}"
+  )
+
+  if [[ -n "$branch" ]]; then
+    docker_args+=(-e "BRANCH=${branch}")
+  fi
+
+  if [[ -n "$all_domains" ]]; then
+    docker_args+=(-e "EXTRA_ALLOWED_DOMAINS=${all_domains}")
+  fi
+
+  docker_args+=("$CONFIG_IMAGE")
+
+  docker "${docker_args[@]}" >/dev/null || die "Failed to start container $container_name"
+
+  # Return info as tab-separated values
+  printf '%s\t%s\t%s\t%s\n' "$container_name" "$repo" "$ssh_port" "$branch"
+}
+
+# --- Commands ---
+
+cmd_start() {
+  local repo="" prompt="" issue="" pr="" branch="" name="" create_pr="false"
+  local -a extra_domains=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -r|--repo) repo="${2:?--repo requires a value}"; shift 2 ;;
+      -p|--prompt) prompt="${2:?--prompt requires a value}"; shift 2 ;;
+      -i|--issue) issue="${2:?--issue requires a value}"; shift 2 ;;
+      --pr) pr="${2:?--pr requires a value}"; shift 2 ;;
+      -b|--branch) branch="${2:?--branch requires a value}"; shift 2 ;;
+      --name) name="${2:?--name requires a value}"; shift 2 ;;
+      --create-pr) create_pr="true"; shift ;;
+      --allow-domain) extra_domains+=("${2:?--allow-domain requires a value}"); shift 2 ;;
+      -*) die "Unknown flag: $1" ;;
+      *) die "Unexpected argument: $1" ;;
+    esac
+  done
+
+  [[ -n "$repo" ]] || die "--repo is required"
+  [[ -n "$prompt" || -n "$issue" || -n "$pr" ]] || die "Provide at least one of --prompt, --issue, or --pr"
+
+  load_config
+
+  local extra_domains_str=""
+  if [[ ${#extra_domains[@]} -gt 0 ]]; then
+    extra_domains_str=$(IFS=,; echo "${extra_domains[*]}")
+  fi
+
+  echo "Starting container..."
+
+  local result
+  result=$(spawn_container "$repo" "$prompt" "$issue" "$pr" "$create_pr" "$branch" "$name" "$extra_domains_str")
+
+  local container_name repo_out ssh_port branch_out
+  IFS=$'\t' read -r container_name repo_out ssh_port branch_out <<< "$result"
+
+  echo ""
+  echo "Container started: $container_name"
+  echo "  Repo:     $repo_out"
+  echo "  SSH port: $ssh_port"
+  echo "  Attach:   $SCRIPT_DIR/claude-sandbox attach $container_name"
+  echo "  Logs:     $SCRIPT_DIR/claude-sandbox logs $container_name"
+}
+
+build_monitor_prompt() {
+  local container_name="$1" repo="$2"
+  local bin="$SCRIPT_DIR/claude-sandbox"
+  cat <<MONITOR
+Monitor the Docker container "${container_name}" (repo: ${repo}).
+
+Your job:
+1. Every 10 seconds, capture the tmux output by running:
+   ${bin} logs ${container_name}
+2. Read the output and identify milestone events:
+   - Repository cloned
+   - Tests running / passing / failing
+   - Commits made
+   - PR created (extract the URL)
+   - Claude finished or errored
+3. Report each milestone to the user ONCE (no duplicates).
+4. Also check for completion by running:
+   docker exec ${container_name} cat /workspace/.claude-done 2>/dev/null
+   If the command succeeds, Claude is done. The output is the exit code.
+5. On completion, report:
+   - Exit code (0 = success)
+   - PR URL if one was created
+   - Brief summary of what happened
+   Then ask the user: "Keep or clean up this container?"
+
+Error handling:
+- If a command fails, retry up to 3 consecutive times before reporting a problem.
+- A single successful poll resets the failure counter.
+
+For cleanup, run: ${bin} stop ${container_name} && ${bin} rm ${container_name}
+MONITOR
+}
+
+cmd_run() {
+  local repo="" prompt="" branch="" name="" create_pr="false"
+  local -a issues=()
+  local -a prs=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -r|--repo) repo="${2:?--repo requires a value}"; shift 2 ;;
+      -p|--prompt) prompt="${2:?--prompt requires a value}"; shift 2 ;;
+      -i|--issue) issues+=("${2:?--issue requires a value}"); shift 2 ;;
+      --pr) prs+=("${2:?--pr requires a value}"); shift 2 ;;
+      -b|--branch) branch="${2:?--branch requires a value}"; shift 2 ;;
+      --name) name="${2:?--name requires a value}"; shift 2 ;;
+      --create-pr) create_pr="true"; shift ;;
+      -*) die "Unknown flag: $1" ;;
+      *) die "Unexpected argument: $1" ;;
+    esac
+  done
+
+  [[ -n "$repo" ]] || die "--repo is required"
+
+  # Build target list
+  local -a target_types=()
+  local -a target_values=()
+
+  if [[ -n "$prompt" ]]; then
+    target_types+=("prompt")
+    target_values+=("$prompt")
+  fi
+  for i in "${issues[@]}"; do
+    target_types+=("issue")
+    target_values+=("$i")
+  done
+  for p in "${prs[@]}"; do
+    target_types+=("pr")
+    target_values+=("$p")
+  done
+
+  [[ ${#target_types[@]} -gt 0 ]] || die "Provide at least one of --prompt, --issue, or --pr"
+
+  # Validate single-container flags
+  if [[ ${#target_types[@]} -gt 1 && (-n "$branch" || -n "$name") ]]; then
+    die "--branch and --name can only be used with a single target"
+  fi
+
+  load_config
+
+  echo "Spawning ${#target_types[@]} container$([ ${#target_types[@]} -gt 1 ] && echo s)..."
+
+  local -a spawned_names=()
+  local -a spawned_repos=()
+
+  for idx in "${!target_types[@]}"; do
+    local ttype="${target_types[$idx]}"
+    local tvalue="${target_values[$idx]}"
+    local t_prompt="" t_issue="" t_pr=""
+    local label=""
+
+    case "$ttype" in
+      prompt) t_prompt="$tvalue"; label="prompt" ;;
+      issue)  t_issue="$tvalue"; label="issue #$tvalue" ;;
+      pr)     t_pr="$tvalue"; label="PR #$tvalue" ;;
+    esac
+
+    local result
+    if result=$(spawn_container "$repo" "$t_prompt" "$t_issue" "$t_pr" "$create_pr" "$branch" "$name" ""); then
+      local container_name repo_out ssh_port branch_out
+      IFS=$'\t' read -r container_name repo_out ssh_port branch_out <<< "$result"
+      spawned_names+=("$container_name")
+      spawned_repos+=("$repo_out")
+      echo "  [ok] $container_name ($label)"
+    else
+      echo "  [fail] $label: container failed to start"
+    fi
+  done
+
+  if [[ ${#spawned_names[@]} -eq 0 ]]; then
+    die "All containers failed to start"
+  fi
+
+  # Print monitoring commands
+  echo ""
+  echo "Containers are running. Monitor subagents will report milestones."
+  local bin="$SCRIPT_DIR/claude-sandbox"
+  echo "You can also use these commands manually:"
+  for i in "${!spawned_names[@]}"; do
+    echo "  logs:   $bin logs ${spawned_names[$i]}"
+    echo "  attach: $bin attach ${spawned_names[$i]}"
+  done
+
+  # Print subagent launch instructions
+  echo ""
+  echo "--- MONITOR SUBAGENT INSTRUCTIONS ---"
+  for i in "${!spawned_names[@]}"; do
+    local monitor_prompt
+    monitor_prompt=$(build_monitor_prompt "${spawned_names[$i]}" "${spawned_repos[$i]}")
+    jq -nc --arg name "${spawned_names[$i]}" --arg prompt "$monitor_prompt" \
+      '{containerName: $name, prompt: $prompt}'
+  done
+}
+
+cmd_ls() {
+  local output
+  output=$(docker ps -a --filter "label=app=claude-sandbox" \
+    --format '{{.Names}}\t{{.Label "claude-sandbox.repo"}}\t{{.State}}\t{{.Label "claude-sandbox.ssh-port"}}\t{{.CreatedAt}}')
+
+  if [[ -z "$output" ]]; then
+    echo "No sandbox containers found."
+    return
+  fi
+
+  printf '%-30s %-25s %-12s %-10s %-25s\n' "NAME" "REPO" "STATUS" "SSH PORT" "CREATED"
+  while IFS=$'\t' read -r name repo status port created; do
+    printf '%-30s %-25s %-12s %-10s %-25s\n' "$name" "$repo" "$status" "$port" "$created"
+  done <<< "$output"
+}
+
+cmd_logs() {
+  local name="" follow=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f|--follow) follow=true; shift ;;
+      -*) die "Unknown flag: $1" ;;
+      *) name="$1"; shift ;;
+    esac
+  done
+  [[ -n "$name" ]] || die "Container name required"
+
+  if [[ "$follow" == "true" ]]; then
+    local last_output=""
+    while true; do
+      local output
+      output=$(docker exec "$name" tmux capture-pane -t claude -p -S -200 2>/dev/null) || die "Failed to capture logs from $name"
+      if [[ "$output" != "$last_output" ]]; then
+        printf '\033[2J\033[H'
+        printf '%s' "$output"
+        last_output="$output"
+      fi
+      sleep 2
+    done
+  else
+    docker exec "$name" tmux capture-pane -t claude -p -S -200 || die "Failed to capture logs from $name"
+  fi
+}
+
+cmd_attach() {
+  local name="${1:?Container name required}"
+
+  # Verify container exists and is running
+  local state
+  state=$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null) || die "Container \"$name\" not found. Run \"claude-sandbox ls\" to see available containers."
+  if [[ "$state" != "running" ]]; then
+    die "Container \"$name\" is not running (status: $state)."
+  fi
+
+  # Get SSH port from label
+  local ssh_port
+  ssh_port=$(docker inspect -f '{{index .Config.Labels "claude-sandbox.ssh-port"}}' "$name")
+  [[ -n "$ssh_port" ]] || die "Could not determine SSH port for $name"
+
+  local key_path="$CONFIG_DIR/ssh/id_ed25519"
+  [[ -f "$key_path" ]] || die "SSH key not found at $key_path"
+
+  echo "Attaching to $name on port $ssh_port..."
+  exec ssh -i "$key_path" -p "$ssh_port" \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    -o IdentitiesOnly=yes \
+    -o LogLevel=ERROR \
+    claude@localhost -t "tmux attach -t claude"
+}
+
+cmd_stop() {
+  local name="${1:?Container name required}"
+  echo "Stopping $name..."
+  docker stop "$name" >/dev/null 2>&1 || true
+  echo "Container $name stopped."
+}
+
+cmd_rm() {
+  local name="" force=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f|--force) force=true; shift ;;
+      -*) die "Unknown flag: $1" ;;
+      *) name="$1"; shift ;;
+    esac
+  done
+  [[ -n "$name" ]] || die "Container name required"
+
+  if [[ "$force" != "true" ]]; then
+    local state
+    state=$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null) || die "Container \"$name\" not found."
+    if [[ "$state" == "running" ]]; then
+      die "Container \"$name\" is still running. Use --force or stop it first."
+    fi
+  fi
+
+  echo "Removing $name..."
+  docker rm -f "$name" >/dev/null
+  echo "Container $name removed."
+}
+
+cmd_build() {
+  load_config
+  local tag="$CONFIG_IMAGE"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --tag) tag="${2:?--tag requires a value}"; shift 2 ;;
+      -*) die "Unknown flag: $1" ;;
+      *) die "Unexpected argument: $1" ;;
+    esac
+  done
+
+  echo "Building image $tag..."
+  docker build -t "$tag" "$SCRIPT_DIR/docker"
+  echo "Image $tag built successfully."
+}
+
+# --- Main ---
+
+usage() {
+  cat <<'EOF'
+Usage: claude-sandbox <command> [options]
+
+Commands:
+  start       Start a new sandbox container
+  run         Start containers with monitor subagent instructions
+  ls          List sandbox containers
+  logs        Show tmux output from a container
+  attach      SSH into a container's Claude tmux session
+  stop        Stop a container
+  rm          Remove a container
+  build       Build the Docker image
+
+Run 'claude-sandbox <command> --help' for command-specific help.
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  shift || true
+
+  case "$cmd" in
+    ls)     cmd_ls "$@" ;;
+    stop)   cmd_stop "$@" ;;
+    rm)     cmd_rm "$@" ;;
+    build)  cmd_build "$@" ;;
+    start)  cmd_start "$@" ;;
+    run)    cmd_run "$@" ;;
+    logs)   cmd_logs "$@" ;;
+    attach) cmd_attach "$@" ;;
+    -h|--help|help|"") usage ;;
+    *)      die "Unknown command: $cmd. Run 'claude-sandbox --help' for usage." ;;
+  esac
+}
+
+main "$@"
