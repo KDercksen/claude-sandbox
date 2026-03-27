@@ -8,7 +8,7 @@ Delegate GitHub issues, PRs, or freeform tasks to sandboxed Claude agents that w
 
 - [Docker](https://docs.docker.com/get-docker/)
 - Node.js >= 18
-- [Claude Code](https://www.npmjs.com/package/@anthropic-ai/claude-code) (`@anthropic-ai/claude-code`)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`curl -fsSL https://claude.ai/install.sh | bash`)
 - [`gh` CLI](https://cli.github.com/) (for issue/PR context fetching)
 
 ## Install
