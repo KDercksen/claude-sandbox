@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "author": "KDercksen",
   "bin": {
-    "claude-sandbox": "./bin/run.js"
+    "claude-sandbox": "./bin/claude-sandbox"
   },
   "bugs": "https://github.com/tmp/claude-sandbox/issues",
   "dependencies": {
@@ -54,6 +54,7 @@
   "type": "module",
   "oclif": {
     "bin": "claude-sandbox",
+    "binAliases": ["claude-sandbox"],
     "dirname": "claude-sandbox",
     "commands": "./dist/commands",
     "plugins": [
