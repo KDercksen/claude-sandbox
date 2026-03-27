@@ -4,6 +4,7 @@ import {homedir} from 'node:os'
 import {join} from 'node:path'
 
 export interface SandboxConfig {
+  allowedDomains: string[]
   defaultBranchPrefix: string
   githubPat?: string
   image: string
@@ -11,6 +12,7 @@ export interface SandboxConfig {
 }
 
 const DEFAULTS: SandboxConfig = {
+  allowedDomains: [],
   defaultBranchPrefix: 'claude/',
   image: 'claude-sandbox:latest',
   sshPortRange: [2200, 2299],

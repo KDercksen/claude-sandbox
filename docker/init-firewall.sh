@@ -85,6 +85,29 @@ for domain in \
     done < <(echo "$ips")
 done
 
+# 6b. Resolve and add extra allowed domains from EXTRA_ALLOWED_DOMAINS env var
+if [ -n "${EXTRA_ALLOWED_DOMAINS:-}" ]; then
+    IFS=',' read -ra EXTRA_DOMAINS <<< "$EXTRA_ALLOWED_DOMAINS"
+    for domain in "${EXTRA_DOMAINS[@]}"; do
+        domain=$(echo "$domain" | xargs)  # trim whitespace
+        if [ -z "$domain" ]; then
+            continue
+        fi
+        echo "Resolving extra domain $domain..."
+        ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
+        if [ -z "$ips" ]; then
+            echo "WARNING: Failed to resolve $domain, skipping"
+            continue
+        fi
+
+        while read -r ip; do
+            if [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+                ipset add allowed-domains "$ip" 2>/dev/null || true
+            fi
+        done < <(echo "$ips")
+    done
+fi
+
 # 7. Allow host network (Docker bridge)
 HOST_IP=$(ip route | grep default | cut -d" " -f3)
 if [ -n "$HOST_IP" ]; then

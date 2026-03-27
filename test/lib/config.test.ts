@@ -23,11 +23,13 @@ describe('config', () => {
     expect(config.sshPortRange).to.deep.equal([2200, 2299])
     expect(config.defaultBranchPrefix).to.equal('claude/')
     expect(config.githubPat).to.be.undefined
+    expect(config.allowedDomains).to.deep.equal([])
   })
 
   it('loads config from file', async () => {
     const configPath = join(tempDir, 'config.json')
     const data: SandboxConfig = {
+      allowedDomains: ['example.internal.com'],
       defaultBranchPrefix: 'bot/',
       githubPat: 'github_pat_test123',
       image: 'my-image:v2',
@@ -44,6 +46,7 @@ describe('config', () => {
 
   it('saves config to file', async () => {
     const config: SandboxConfig = {
+      allowedDomains: [],
       defaultBranchPrefix: 'dev/',
       image: 'claude-sandbox:dev',
       sshPortRange: [4000, 4099] as [number, number],
@@ -62,5 +65,22 @@ describe('config', () => {
     const config = await loadConfig(tempDir)
     expect(config.image).to.equal('custom:v1')
     expect(config.sshPortRange).to.deep.equal([2200, 2299])
+  })
+
+  it('allowedDomains defaults to empty array', async () => {
+    const config = await loadConfig(tempDir)
+    expect(config.allowedDomains).to.deep.equal([])
+  })
+
+  it('merges allowedDomains from user config', async () => {
+    const {writeFile} = await import('node:fs/promises')
+    await writeFile(
+      join(tempDir, 'config.json'),
+      JSON.stringify({allowedDomains: ['registry.internal.company.com', 'artifactory.myorg.net']}),
+    )
+
+    const config = await loadConfig(tempDir)
+    expect(config.allowedDomains).to.deep.equal(['registry.internal.company.com', 'artifactory.myorg.net'])
+    expect(config.image).to.equal('claude-sandbox:latest')
   })
 })
