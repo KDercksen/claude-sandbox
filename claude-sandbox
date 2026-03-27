@@ -551,8 +551,8 @@ Commands:
   start       Start a new sandbox container
   run         Start containers with monitor subagent instructions
   ls          List sandbox containers
-  logs        Show tmux output from a container
-  attach      SSH into a container's Claude tmux session
+  logs        Show progress updates from a container
+  attach      SSH into a container
   stop        Stop a container
   rm          Remove a container
   build       Build the Docker image
