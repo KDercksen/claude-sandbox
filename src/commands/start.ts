@@ -1,17 +1,14 @@
 // src/commands/start.ts
 import {Command, Flags} from '@oclif/core'
-import {execFile} from 'node:child_process'
 import {homedir} from 'node:os'
 import {join} from 'node:path'
-import {promisify} from 'node:util'
 
 import {getConfigDir, loadConfig} from '../lib/config.js'
 import {generateContainerName} from '../lib/container-name.js'
 import {SandboxDocker} from '../lib/docker.js'
+import {resolveGitHubToken} from '../lib/github-token.js'
 import {buildPrompt} from '../lib/prompt-builder.js'
 import {ensureSSHKeyPair} from '../lib/ssh.js'
-
-const execFileAsync = promisify(execFile)
 
 export default class Start extends Command {
   static description = 'Start a new Claude sandbox container'
@@ -65,7 +62,12 @@ export default class Start extends Command {
     }, undefined, {createPr: flags['create-pr']})
 
     // Resolve GitHub token
-    const githubToken = await this.resolveGitHubToken(config.githubPat)
+    let githubToken: string
+    try {
+      githubToken = await resolveGitHubToken(config.githubPat)
+    } catch (error) {
+      this.error(error instanceof Error ? error.message : 'No GitHub token found.')
+    }
 
     // Ensure SSH keypair exists
     const keys = await ensureSSHKeyPair(configDir)
@@ -105,19 +107,5 @@ export default class Start extends Command {
     this.log(`  SSH port: ${info.sshPort}`)
     this.log(`  Attach:   claude-sandbox attach ${info.name}`)
     this.log(`  Logs:     claude-sandbox logs ${info.name}`)
-  }
-
-  private async resolveGitHubToken(configPat?: string): Promise<string> {
-    if (configPat) return configPat
-
-    try {
-      const {stdout} = await execFileAsync('gh', ['auth', 'token'])
-      const token = stdout.trim()
-      if (token) return token
-    } catch {
-      // gh not available or not logged in
-    }
-
-    this.error('No GitHub token found. Set github_pat in config or run "gh auth login".')
   }
 }
