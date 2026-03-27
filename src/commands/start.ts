@@ -1,14 +1,9 @@
 // src/commands/start.ts
 import {Command, Flags} from '@oclif/core'
-import {homedir} from 'node:os'
-import {join} from 'node:path'
 
-import {getConfigDir, loadConfig} from '../lib/config.js'
-import {generateContainerName} from '../lib/container-name.js'
-import {SandboxDocker} from '../lib/docker.js'
+import {loadConfig} from '../lib/config.js'
 import {resolveGitHubToken} from '../lib/github-token.js'
-import {buildPrompt} from '../lib/prompt-builder.js'
-import {ensureSSHKeyPair} from '../lib/ssh.js'
+import {spawnContainer} from '../lib/spawn.js'
 
 export default class Start extends Command {
   static description = 'Start a new Claude sandbox container'
@@ -45,23 +40,11 @@ export default class Start extends Command {
   async run(): Promise<void> {
     const {flags} = await this.parse(Start)
     const config = await loadConfig()
-    const configDir = getConfigDir()
 
-    // Validate that at least one prompt source is given
     if (!flags.prompt && !flags.issue && !flags.pr) {
       this.error('Provide at least one of --prompt, --issue, or --pr')
     }
 
-    // Build the prompt
-    this.log('Building prompt...')
-    const prompt = await buildPrompt({
-      issue: flags.issue,
-      pr: flags.pr,
-      prompt: flags.prompt,
-      repo: flags.repo,
-    }, undefined, {createPr: flags['create-pr']})
-
-    // Resolve GitHub token
     let githubToken: string
     try {
       githubToken = await resolveGitHubToken(config.githubPat)
@@ -69,43 +52,24 @@ export default class Start extends Command {
       this.error(error instanceof Error ? error.message : 'No GitHub token found.')
     }
 
-    // Ensure SSH keypair exists
-    const keys = await ensureSSHKeyPair(configDir)
+    this.log('Starting container...')
 
-    // Generate container name
-    const containerName = generateContainerName(flags.repo, flags.name)
-
-    // Generate branch name if not provided but --create-pr is set
-    let {branch} = flags
-    if (!branch && flags['create-pr']) {
-      branch = `${config.defaultBranchPrefix}${containerName}`
-    }
-
-    // Find a free SSH port
-    const docker = new SandboxDocker()
-    const sshPort = await docker.findFreePort(config.sshPortRange[0], config.sshPortRange[1])
-
-    this.log(`Starting container ${containerName}...`)
-
-    const info = await docker.createAndStartContainer({
-      branch,
-      claudeConfigDir: join(homedir(), '.claude'),
-      claudeConfigFile: join(homedir(), '.claude.json'),
+    const result = await spawnContainer({
+      branch: flags.branch,
       createPr: flags['create-pr'],
       githubToken,
-      image: config.image,
-      name: containerName,
-      prompt,
+      issue: flags.issue,
+      name: flags.name,
+      pr: flags.pr,
+      prompt: flags.prompt,
       repo: flags.repo,
-      sshPort,
-      sshPublicKeyPath: keys.publicKeyPath,
     })
 
     this.log('')
-    this.log(`Container started: ${info.name}`)
-    this.log(`  Repo:     ${info.repo}`)
-    this.log(`  SSH port: ${info.sshPort}`)
-    this.log(`  Attach:   claude-sandbox attach ${info.name}`)
-    this.log(`  Logs:     claude-sandbox logs ${info.name}`)
+    this.log(`Container started: ${result.containerName}`)
+    this.log(`  Repo:     ${result.repo}`)
+    this.log(`  SSH port: ${result.sshPort}`)
+    this.log(`  Attach:   claude-sandbox attach ${result.containerName}`)
+    this.log(`  Logs:     claude-sandbox logs ${result.containerName}`)
   }
 }
