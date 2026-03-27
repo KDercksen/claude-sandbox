@@ -12,7 +12,7 @@ Use this skill when the user asks you to run work in a sandbox, or when you reco
 ## Prerequisites
 
 Before launching, verify:
-1. **Plugin installed:** Run `node ${CLAUDE_PLUGIN_ROOT}/bin/run.js --help`. If it fails, something is wrong with the plugin installation.
+1. **Plugin installed:** Run `${CLAUDE_PLUGIN_ROOT}/bin/run.js --help`. If it fails, tell user: "Plugin dependencies may not be installed. Try restarting Claude Code or running `npm install --production` in the plugin directory."
 2. **Git repo:** Run `git remote get-url origin` in the current working directory. If it fails, tell the user: "Not in a git repository with a remote. Navigate to a repo first."
 3. **Docker running:** If the start command fails with a Docker connection error, suggest checking that Docker is running.
 
@@ -20,10 +20,8 @@ Before launching, verify:
 
 All CLI commands are run via:
 ```bash
-node ${CLAUDE_PLUGIN_ROOT}/bin/run.js <command> [flags]
+${CLAUDE_PLUGIN_ROOT}/bin/run.js <command> [flags]
 ```
-
-Set `NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules` in the environment for all commands so dependencies resolve correctly.
 
 ## Step 1: Parse Intent
 
@@ -53,17 +51,17 @@ Strip any trailing `.git`.
 
 Construct and run the command:
 ```bash
-NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${CLAUDE_PLUGIN_ROOT}/bin/run.js start --repo <org/repo> [--issue N | --pr N | --prompt "..."] [--create-pr] [--name <name>]
+${CLAUDE_PLUGIN_ROOT}/bin/run.js start --repo <org/repo> [--issue N | --pr N | --prompt "..."] [--create-pr] [--name <name>]
 ```
 
 Rules:
 - Add `--create-pr` by default for issue-based tasks. Do NOT add it for PR reviews.
-- Let the CLI auto-generate the container name unless the user specified one.
+- Always pass `--name` with a short, descriptive slug for the task (e.g., `--name fix-auth-bug`, `--name add-allowlist`). If the user specified a name, use that instead.
 - For **multiple targets**, launch each sandbox in parallel using separate Bash calls or the dispatching-parallel-agents skill.
 
 After each successful launch, **always** print:
 ```
-To SSH into the container: NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${CLAUDE_PLUGIN_ROOT}/bin/run.js attach <name>
+To SSH into the container: ${CLAUDE_PLUGIN_ROOT}/bin/run.js attach <name>
 ```
 
 ## Step 4: Monitor
@@ -71,7 +69,7 @@ To SSH into the container: NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${C
 After launching, poll for completion. Use a background Bash command or periodic checks:
 
 ```bash
-NODE_PATH=${CLAUDE_PLUGIN_DATA}/node_modules node ${CLAUDE_PLUGIN_ROOT}/bin/run.js logs <name>
+${CLAUDE_PLUGIN_ROOT}/bin/run.js logs <name>
 ```
 
 **What to look for:**
