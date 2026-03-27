@@ -3,22 +3,21 @@ set -euo pipefail
 
 cd /workspace
 
-echo "=== Starting Claude Code ==="
-echo "Prompt: ${PROMPT}"
-echo ""
+# Write start marker
+echo '@@UPDATE("Claude session starting")' >> /workspace/.claude-progress
 
-# Run Claude
+# Run Claude in headless mode
 set +e
-claude --dangerously-skip-permissions -p "${PROMPT}"
+claude -p --dangerously-skip-permissions "${PROMPT}"
 EXIT_CODE=$?
 set -e
 
-echo ""
-echo "=== Claude exited with code ${EXIT_CODE} ==="
+# Write completion marker
+echo "@@UPDATE(\"Claude exited with code ${EXIT_CODE}\")" >> /workspace/.claude-progress
 
 # Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
-    echo "WARNING: Found uncommitted changes, committing..."
+    echo '@@UPDATE("Committing leftover uncommitted changes")' >> /workspace/.claude-progress
     git add -A
     git commit -m "claude-sandbox: uncommitted changes from session" || true
 fi
@@ -28,16 +27,10 @@ if [ -n "${BRANCH:-}" ]; then
     LOCAL_SHA=$(git rev-parse HEAD)
     REMOTE_SHA=$(git rev-parse "origin/${BRANCH}" 2>/dev/null || echo "none")
     if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
-        echo "Pushing unpushed changes on ${BRANCH}..."
+        echo '@@UPDATE("Pushing unpushed changes")' >> /workspace/.claude-progress
         git push -u origin "${BRANCH}" 2>&1 || echo "WARNING: push failed"
     fi
 fi
 
-# Write completion marker
+# Write final completion marker
 echo "${EXIT_CODE}" > /workspace/.claude-done
-echo ""
-echo "=== Session complete. Container stays alive for inspection. ==="
-echo "To resume work, run: claude --dangerously-skip-permissions"
-
-# Drop into a shell so tmux session stays open
-exec bash
