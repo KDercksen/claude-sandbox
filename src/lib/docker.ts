@@ -21,6 +21,7 @@ export interface CreateContainerOpts {
   claudeConfigDir: string
   claudeConfigFile: string
   createPr: boolean
+  extraAllowedDomains?: string[]
   githubToken: string
   image: string
   name: string
@@ -65,6 +66,10 @@ export class SandboxDocker {
 
     if (opts.branch) {
       env.push(`BRANCH=${opts.branch}`)
+    }
+
+    if (opts.extraAllowedDomains && opts.extraAllowedDomains.length > 0) {
+      env.push(`EXTRA_ALLOWED_DOMAINS=${opts.extraAllowedDomains.join(',')}`)
     }
 
     const container = await this.docker.createContainer({
