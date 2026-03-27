@@ -17,7 +17,7 @@ Secondary risks are container escape and privilege escalation. These are mitigat
 **Sequence:**
 1. Preserve Docker's internal DNS NAT rules (`127.0.0.11`)
 2. Flush all existing iptables rules and destroy any existing `allowed-domains` ipset
-3. Allow DNS (UDP 53), SSH (TCP 22), and loopback before setting drop policies
+3. Allow DNS (UDP 53) and loopback before setting drop policies
 4. Create `allowed-domains` ipset (`hash:net`)
 5. Fetch GitHub IP ranges from `api.github.com/meta` and aggregate into CIDRs
 6. Resolve all other allowed domains via DNS and add their IPs to the ipset
@@ -59,38 +59,6 @@ Everything not in the allowlist. This includes:
 - **Non-root user:** Container runs as the `claude` user (`USER claude` in Dockerfile)
 - **Read-only config mounts:** Host `.claude/` directory and `.claude.json` are mounted read-only and copied to writable paths at startup by the entrypoint
 - **No Docker socket:** The container cannot access the Docker daemon and cannot manage other containers
-- **SSH access:** Ed25519 keypair generated on the host; public key mounted read-only as `/home/claude/.ssh/authorized_keys`; password authentication disabled in `sshd_config`
 - **Capabilities:** `NET_ADMIN` and `NET_RAW` are granted solely to enable iptables/ipset firewall setup; no other extra capabilities are added
-- **Sudo:** Restricted to specific commands only: `init-firewall.sh`, `sshd`, `cp`, `chown`, `iptables`, `ipset`. The entrypoint needs these for firewall setup, SSH daemon, and copying read-only mounts to writable paths.
-
-## Firewall verification
-
-Integration tests in `test/integration/hardening.test.ts` spin up a real container (image `claude-sandbox:latest`) with the full firewall initialized, then exec commands inside to verify network state.
-
-**Blocked:**
-- `example.com` — generic website
-- `httpbin.org` — arbitrary HTTP API
-- `8.8.8.8:443` — Google DNS (direct IP, not in allowlist)
-- Port 25 to `1.1.1.1` — outbound SMTP
-
-**Allowed:**
-- `api.github.com` — GitHub API
-- `github.com` — GitHub main site
-- `api.anthropic.com` — Anthropic API
-- `registry.npmjs.org` — npm registry
-
-**Policy checks:**
-- Default OUTPUT policy is DROP
-- Default INPUT policy is DROP
-- `allowed-domains` ipset is populated with `hash:net` entries
-- REJECT rule with `icmp-admin-prohibited` is present in OUTPUT chain
-
-Run with: `npm test -- --grep "hardening"`. Requires Docker running and `claude-sandbox:latest` image built. Tests have a 180-second timeout to account for firewall initialization time.
-
-## SSH access model
-
-- Single Ed25519 keypair stored at `~/.claude-sandbox/ssh/id_ed25519` on the host
-- Generated once by `ensureSSHKeyPair()`, reused across all containers
-- Public key mounted read-only at `/home/claude/.ssh/authorized_keys` inside each container
-- The `attach` command uses `StrictHostKeyChecking=no` — containers are ephemeral and host keys change between runs
-- Password authentication is disabled in `sshd_config` (`PasswordAuthentication no`)
+- **Sudo:** Restricted to specific commands only: `init-firewall.sh`, `cp`, `chown`, `iptables`, `ipset`. The entrypoint needs these for firewall setup and copying read-only mounts to writable paths.
+- **Access via `docker exec`:** No SSH server. Shell access uses `docker exec -it <name> bash` from the host.

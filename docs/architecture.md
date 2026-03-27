@@ -2,119 +2,104 @@
 
 ## Overview
 
-Three-layer architecture:
+Two-layer architecture:
 
-- **CLI layer** (`src/commands/`) — user-facing commands, flag parsing, output formatting
-- **Lib layer** (`src/lib/`) — business logic: Docker operations, config, prompt building, SSH, naming
+- **CLI layer** (`claude-sandbox`) — single bash script: flag parsing, prompt building, container spawning
 - **Docker layer** (`docker/`) — container image, entrypoint, firewall rules, Claude wrapper
+
+Post-launch container management uses `docker` directly (no CLI wrapper needed).
 
 ---
 
 ## Component Map
 
-### Commands
+### CLI Script
 
-| File | Responsibility |
-|------|---------------|
-| `src/commands/start.ts` | Orchestrates container launch: validates flags, builds prompt, resolves token, generates name, finds port, calls `SandboxDocker.createAndStartContainer()` |
-| `src/commands/attach.ts` | Looks up container SSH port, replaces current process with `ssh ... tmux attach -t claude` via `execFileSync` |
-| `src/commands/ls.ts` | Queries Docker for labeled containers, formats table output |
-| `src/commands/logs.ts` | Runs `tmux capture-pane -t claude -p -S -200` via `execInContainer`; optional 2-second polling loop with screen-clear on change |
-| `src/commands/build.ts` | Tar-streams the `docker/` directory to the Docker build API |
-| `src/commands/stop.ts` | Graceful container stop (ignores 304 "already stopped") |
-| `src/commands/rm.ts` | Container removal; requires `--force` to remove running containers |
-
-### Lib
-
-| File | Responsibility |
-|------|---------------|
-| `src/lib/docker.ts` | `SandboxDocker` class wrapping dockerode: `buildImage`, `createAndStartContainer`, `execInContainer`, `listContainers`, `stopContainer`, `removeContainer`, `findFreePort` |
-| `src/lib/config.ts` | Loads/saves `~/.claude-sandbox/config.json`, merges user overrides with defaults |
-| `src/lib/prompt-builder.ts` | Assembles prompt from `--prompt`, `--issue`, `--pr` flags; fetches issue/PR content via `gh` CLI; prepends default instruction when no explicit `--prompt` |
-| `src/lib/ssh.ts` | Ensures Ed25519 keypair exists at `~/.claude-sandbox/ssh/id_ed25519` |
-| `src/lib/container-name.ts` | Generates `claude-sandbox-{repo}-{hex}` names, or `claude-sandbox-{sanitized-name}` when `--name` is provided |
+| Function | Responsibility |
+|----------|---------------|
+| `build_prompt()` | Assembles prompt from `--prompt`, `--issue`, `--pr` flags; fetches issue/PR content via `gh` CLI; appends git workflow and progress update instructions |
+| `spawn_container()` | Resolves token, generates name, builds docker run args, launches container |
+| `cmd_run()` | Orchestrates multi-target spawning: parses flags, iterates targets, spawns containers, prints monitor subagent instructions as JSON |
+| `cmd_build()` | Builds the Docker image from `docker/` directory |
+| `build_monitor_prompt()` | Generates the polling instructions for a monitor subagent (uses `docker exec` only) |
+| `generate_container_name()` | Generates `claude-sandbox-{repo}-{hex}` names, or `claude-sandbox-{sanitized}` when `--name` is provided |
 
 ### Docker
 
 | File | Responsibility |
 |------|---------------|
-| `docker/Dockerfile` | Debian Bookworm + Node 20 base; installs git, openssh-server, tmux, gh, iptables/ipset, uv, Claude Code npm package; creates `claude` user with passwordless sudo |
-| `docker/entrypoint.sh` | Startup sequence: firewall init → sshd → copy read-only mounts → configure git credentials → gh auth → clone repo → checkout/create branch → launch Claude in tmux → `tail -f /dev/null` keepalive |
-| `docker/init-firewall.sh` | Configures iptables/ipset rules to restrict outbound network access |
-| `docker/claude-wrapper.sh` | Runs `claude --dangerously-skip-permissions -p "$PROMPT"`; on exit: commits uncommitted changes, pushes branch, optionally creates PR via `gh pr create`, writes `/workspace/.claude-done`, drops into a shell to keep tmux session open |
+| `docker/Dockerfile` | Node 20 (Bookworm) base; installs git, gh, iptables/ipset, uv, Claude Code; creates `claude` user with restricted sudo |
+| `docker/entrypoint.sh` | Startup sequence: firewall init → copy read-only mounts → configure git credentials → gh auth → clone repo → checkout/create branch → launch Claude wrapper → `tail -f /dev/null` keepalive |
+| `docker/init-firewall.sh` | Configures iptables/ipset rules to restrict outbound network access to GitHub + Anthropic + package registries only |
+| `docker/claude-wrapper.sh` | Runs `claude --dangerously-skip-permissions -p "$PROMPT"`; on exit: commits uncommitted changes, pushes branch, optionally creates PR via `gh pr create`, writes exit code to `/workspace/.claude-done` |
 
 ---
 
 ## Container Lifecycle
 
 ### 1. Build
-`build` command tar-streams the `docker/` directory to the Docker daemon build API. The resulting image tag defaults to `claude-sandbox:latest` (configurable).
+`build` command runs `docker build` on the `docker/` directory. Image tag defaults to `claude-sandbox:latest` (configurable).
 
 ### 2. Create
-`start` command calls `SandboxDocker.createAndStartContainer()` which creates the container with:
-- **Env vars:** `REPO`, `PROMPT`, `GITHUB_TOKEN`, `CREATE_PR`, `BRANCH` (optional)
+`run` command calls `spawn_container()` which creates the container with:
+- **Env vars:** `REPO`, `PROMPT`, `GITHUB_TOKEN`, `CREATE_PR`, `BRANCH` (optional), `EXTRA_ALLOWED_DOMAINS` (optional)
 - **Read-only mounts:**
   - `~/.claude` → `/home/claude/.claude.host:ro`
   - `~/.claude.json` → `/home/claude/.claude.json.host:ro`
-  - `~/.claude-sandbox/ssh/id_ed25519.pub` → `/home/claude/.ssh/authorized_keys:ro`
 - **Capabilities:** `NET_ADMIN`, `NET_RAW` (required for iptables)
-- **Port binding:** random host port in configured range → container port 22
-- **Labels:** `app=claude-sandbox`, `claude-sandbox.repo`, `claude-sandbox.ssh-port`
+- **Labels:** `app=claude-sandbox`, `claude-sandbox.repo`
 
 ### 3. Boot (entrypoint.sh)
 1. Run `init-firewall.sh` via sudo
-2. Start `sshd`
-3. Copy read-only mounted Claude config to writable paths (`/home/claude/.claude/`, `/home/claude/.claude.json`), fix ownership
-4. Configure git credentials using `GITHUB_TOKEN`; set git user name/email
-5. Authenticate `gh` CLI
-6. Clone `https://github.com/$REPO.git` to `/workspace`
-7. Checkout or create `$BRANCH` if set
-8. Launch `claude-wrapper.sh` in a detached tmux session named `claude`
-9. `exec tail -f /dev/null` — keeps container alive after Claude exits
+2. Copy read-only mounted Claude config to writable paths, fix ownership
+3. Configure git credentials using `GITHUB_TOKEN`; set git user name/email
+4. Authenticate `gh` CLI
+5. Clone `https://github.com/$REPO.git` to `/workspace`
+6. Checkout or create `$BRANCH` if set
+7. Launch `claude-wrapper.sh` in background, logging to `/workspace/.claude-log`
+8. `exec tail -f /dev/null` — keeps container alive after Claude exits
 
 ### 4. Run (claude-wrapper.sh)
 1. Run `claude --dangerously-skip-permissions -p "$PROMPT"` in `/workspace`
 2. If uncommitted changes remain: `git add -A && git commit`
 3. If `$BRANCH` set: `git push -u origin $BRANCH`
-4. If `CREATE_PR=true` and branch set: `gh pr create --title "Claude Sandbox: $BRANCH"`
+4. If `CREATE_PR=true` and branch set: `gh pr create`
 5. Write exit code to `/workspace/.claude-done`
-6. `exec bash` — keeps tmux session open for inspection
 
 ### 5. Monitor
-- `logs` command: runs `tmux capture-pane` via Docker exec; `--follow` polls every 2 seconds
-- `attach` command: SSH into the container and attach to the tmux session
+Monitor subagents poll via `docker exec`:
+- `docker exec <name> cat /workspace/.claude-progress` — progress updates
+- `docker exec <name> cat /workspace/.claude-done` — completion marker
+- `docker exec -it <name> bash` — shell access for inspection
 
 ### 6. Cleanup
-`stop` then `rm` — or `rm` alone (uses `force: true`).
+`docker stop <name> && docker rm <name>`
 
 ---
 
-## Data Flow for `start`
+## Data Flow for `run`
 
 ```
 Flags parsed
-  → buildPrompt()           # fetches issue/PR body via gh CLI, assembles prompt string
-  → resolveGitHubToken()    # config.githubPat or `gh auth token`
-  → ensureSSHKeyPair()      # creates ~/.claude-sandbox/ssh/ keypair if absent
-  → generateContainerName() # claude-sandbox-{repo}-{hex}
-  → auto-generate branch    # if --create-pr and no --branch: claude-sandbox-{prefix}{name}
-  → findFreePort()          # shuffles port range, probes with net.createServer()
-  → createAndStartContainer() # creates + starts Docker container with env, mounts, caps, labels
-  → print attach/logs hints
+  → build_prompt()           # fetches issue/PR body via gh CLI, assembles prompt string
+  → resolve_github_token()   # config.githubPat or `gh auth token`
+  → generate_container_name() # claude-sandbox-{repo}-{hex}
+  → auto-generate branch     # if --create-pr and no --branch
+  → spawn_container()        # creates + starts Docker container
+  → build_monitor_prompt()   # generates docker-exec-based polling instructions
+  → output JSON per container for subagent launch
 ```
 
 ---
 
 ## Key Design Decisions
 
-**Single shared SSH keypair** — one keypair at `~/.claude-sandbox/ssh/` is reused across all containers. Simplicity over per-container isolation; containers are ephemeral and already isolated by Docker.
+**Docker labels for discovery** — `app=claude-sandbox` label filters containers. `claude-sandbox.repo` is stored as a label for identification.
 
-**tmux for session persistence** — Claude runs inside a named tmux session (`claude`). Survives SSH disconnects. Enables `logs` to capture pane output without an active SSH connection.
+**`docker exec` for all access** — no SSH server in the container. Shell access, log reading, and completion checking all use `docker exec`. This simplifies the image, removes port allocation, and avoids permission issues with SSH keypair management.
 
-**Docker labels for discovery** — `app=claude-sandbox` label filters containers in `ls`. `claude-sandbox.repo` and `claude-sandbox.ssh-port` are stored as labels so the CLI can reconstruct `ContainerInfo` without external state.
+**Read-only mounts + copy** — host Claude config is mounted read-only. The entrypoint copies to writable paths. This prevents the container from modifying host files while still sharing credentials.
 
-**Randomized port allocation** — `findFreePort` shuffles the candidate range before probing. Reduces collision probability when multiple containers are launched in parallel.
+**`tail -f /dev/null` keepalive** — after setup and Claude launch, the container process becomes `tail -f /dev/null`. The container stays alive for `docker exec` access and inspection after Claude finishes.
 
-**Read-only mounts + copy** — host Claude config and SSH authorized_keys are mounted read-only. The entrypoint copies them to writable paths. This prevents the container from modifying host files while still sharing credentials.
-
-**`tail -f /dev/null` keepalive** — after the entrypoint completes setup and launches Claude in tmux, the container process becomes `tail -f /dev/null`. The container stays alive for SSH access and inspection after Claude finishes.
+**File-based progress** — Claude writes `@@UPDATE(...)` lines to `/workspace/.claude-progress`. Monitor subagents poll this file via `docker exec`. Completion is signaled by `/workspace/.claude-done` containing the exit code.

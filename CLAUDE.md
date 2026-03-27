@@ -10,20 +10,15 @@ Claude Code plugin that runs Claude in isolated, network-hardened Docker contain
 - Docker for container management
 - jq for JSON parsing
 - gh (GitHub CLI) for issue/PR fetching and auth
-- ssh/ssh-keygen for container access
 
 ## Commands
 
 ```bash
 ./claude-sandbox build          # Build the Docker image
-./claude-sandbox start [flags]  # Start a single container
 ./claude-sandbox run [flags]    # Start containers with monitor output
-./claude-sandbox ls             # List containers
-./claude-sandbox logs <name>    # Show tmux output
-./claude-sandbox attach <name>  # SSH into container
-./claude-sandbox stop <name>    # Stop a container
-./claude-sandbox rm <name>      # Remove a container
 ```
+
+Container management uses docker directly (see `skills/delegate/SKILL.md` for full reference).
 
 ## Structure
 
@@ -44,7 +39,7 @@ Claude Code plugin that runs Claude in isolated, network-hardened Docker contain
 ### Docker
 - All Docker operations use the `docker` CLI directly
 - Containers are labeled `app=claude-sandbox` for discovery
-- Container info stored in Docker labels (`claude-sandbox.repo`, `claude-sandbox.ssh-port`)
+- Container info stored in Docker labels (`claude-sandbox.repo`)
 
 ### Config
 - Config file: `~/.claude-sandbox/config.json`

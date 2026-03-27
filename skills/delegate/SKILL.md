@@ -93,13 +93,26 @@ The monitor subagent will:
 
 When a monitor subagent reports completion and asks "keep or clean up?":
 
-- **Clean up:** Run `claude-sandbox() { "${CLAUDE_PLUGIN_ROOT}/claude-sandbox" "$@"; }; claude-sandbox stop <name> && claude-sandbox rm <name>`
-- **Keep:** Do nothing — container stays running for inspection via `attach`
+- **Clean up:** Run `docker stop <name> && docker rm <name>`
+- **Keep:** Do nothing — container stays running for inspection
+
+## Docker Reference
+
+All post-launch container management uses docker directly:
+
+| Task | Command |
+|------|---------|
+| List containers | `docker ps -a --filter label=app=claude-sandbox` |
+| View progress | `docker exec <name> cat /workspace/.claude-progress` |
+| Check completion | `docker exec <name> cat /workspace/.claude-done` |
+| Shell into container | `docker exec -it <name> bash` |
+| Stop container | `docker stop <name>` |
+| Remove container | `docker rm <name>` |
 
 ## Error Handling
 
 - **No git remote:** Stop and tell the user. Do not guess repos.
 - **Plugin broken:** Tell user to check plugin installation.
 - **Container fails to start:** Show the full CLI error output. Suggest `docker ps` to check Docker.
-- **Container stops unexpectedly:** Report and suggest using `logs` and `attach` commands.
-- **Monitor subagent crashes:** Container keeps running. User can manually check with `logs` or `attach`.
+- **Container stops unexpectedly:** Report and suggest `docker exec -it <name> bash` to inspect.
+- **Monitor subagent crashes:** Container keeps running. User can manually check with `docker exec`.

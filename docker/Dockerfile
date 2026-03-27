@@ -1,14 +1,11 @@
 FROM node:20-bookworm
 
-ARG CLAUDE_CODE_VERSION=latest
-
 # System packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
   git \
   curl \
   build-essential \
   jq \
-  openssh-server \
   gh \
   iptables \
   ipset \
@@ -25,22 +22,18 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Create claude user
 RUN useradd -m -s /bin/bash -G sudo claude \
-  && echo "claude ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/sbin/sshd, /usr/bin/cp, /usr/bin/chown, /usr/sbin/iptables, /usr/sbin/ipset" > /etc/sudoers.d/claude \
+  && echo "claude ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh, /usr/bin/cp, /usr/bin/chown, /usr/sbin/iptables, /usr/sbin/ipset" > /etc/sudoers.d/claude \
   && chmod 0440 /etc/sudoers.d/claude
 
-# SSH server setup
-RUN mkdir /var/run/sshd \
-  && sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
-  && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
-  && sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-
 # Prepare directories
-RUN mkdir -p /workspace /home/claude/.ssh /home/claude/.claude \
-  && chown -R claude:claude /workspace /home/claude/.ssh /home/claude/.claude \
-  && chmod 700 /home/claude/.ssh
+RUN mkdir -p /workspace /home/claude/.claude \
+  && chown -R claude:claude /workspace /home/claude/.claude
 
-# Install Claude Code
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+# Install Claude Code (as claude user so it goes in ~claude/.claude/)
+USER claude
+RUN curl -fsSL https://claude.ai/install.sh | bash
+USER root
+ENV PATH="/home/claude/.claude/local/bin:${PATH}"
 
 # Copy scripts
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
@@ -54,7 +47,5 @@ RUN chmod +x /usr/local/bin/init-firewall.sh \
 
 WORKDIR /workspace
 USER claude
-
-EXPOSE 22
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
