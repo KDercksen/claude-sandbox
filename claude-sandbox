@@ -65,6 +65,34 @@ generate_container_name() {
   fi
 }
 
+# --- Docker Image ---
+
+docker_dir_hash() {
+  find "$SCRIPT_DIR/docker" -type f -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1
+}
+
+ensure_image() {
+  local tag="$CONFIG_IMAGE"
+  local current_hash
+  current_hash=$(docker_dir_hash)
+
+  local image_hash
+  image_hash=$(docker inspect -f '{{index .Config.Labels "claude-sandbox.build-hash"}}' "$tag" 2>/dev/null) || image_hash=""
+
+  if [[ "$current_hash" == "$image_hash" ]]; then
+    return
+  fi
+
+  if [[ -z "$image_hash" ]]; then
+    echo "Image $tag not found, building..."
+  else
+    echo "Docker files changed, rebuilding $tag..."
+  fi
+
+  docker build -t "$tag" --label "claude-sandbox.build-hash=$current_hash" "$SCRIPT_DIR/docker"
+  echo "Image $tag ready."
+}
+
 # --- Prompt Building ---
 
 build_prompt() {
@@ -262,6 +290,7 @@ cmd_run() {
   fi
 
   load_config
+  ensure_image
 
   local extra_domains_str=""
   if [[ ${#extra_domains[@]} -gt 0 ]]; then
@@ -333,8 +362,10 @@ cmd_build() {
     esac
   done
 
+  local current_hash
+  current_hash=$(docker_dir_hash)
   echo "Building image $tag..."
-  docker build -t "$tag" "$SCRIPT_DIR/docker"
+  docker build -t "$tag" --label "claude-sandbox.build-hash=$current_hash" "$SCRIPT_DIR/docker"
   echo "Image $tag built successfully."
 }
 
