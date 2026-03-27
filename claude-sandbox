@@ -69,12 +69,16 @@ sanitize_name() {
 generate_container_name() {
   local repo="$1" name="${2:-}"
   if [[ -n "$name" ]]; then
-    echo "claude-sandbox-$(sanitize_name "$name")"
+    local sanitized
+    sanitized=$(sanitize_name "$name")
+    echo "claude-sandbox-${sanitized:-unnamed}"
   else
     local repo_name="${repo##*/}"
+    local sanitized
+    sanitized=$(sanitize_name "$repo_name")
     local suffix
     suffix=$(head -c3 /dev/urandom | xxd -p)
-    echo "claude-sandbox-$(sanitize_name "$repo_name")-$suffix"
+    echo "claude-sandbox-${sanitized:-sandbox}-$suffix"
   fi
 }
 
@@ -86,7 +90,7 @@ find_free_port() {
   used_ports=$(ss -tlnH 2>/dev/null | awk '{print $4}' | grep -oE '[0-9]+$' | sort -u)
   local candidates=()
   for ((p=min; p<=max; p++)); do candidates+=("$p"); done
-  candidates=($(shuf -e "${candidates[@]}"))
+  mapfile -t candidates < <(printf '%s\n' "${candidates[@]}" | shuf)
   for port in "${candidates[@]}"; do
     if ! echo "$used_ports" | grep -qx "$port"; then
       echo "$port"
@@ -142,7 +146,7 @@ build_prompt() {
   parts+=("$workflow")
 
   local IFS=$'\n'
-  echo "${parts[*]}"
+  printf '%s\n' "${parts[*]}"
 }
 
 # --- Spawn Container ---
@@ -434,7 +438,16 @@ cmd_logs() {
     local last_output=""
     while true; do
       local output
-      output=$(docker exec "$name" tmux capture-pane -t claude -p -S -200 2>/dev/null) || die "Failed to capture logs from $name"
+      if ! output=$(docker exec "$name" tmux capture-pane -t claude -p -S -200 2>/dev/null); then
+        local cstate
+        cstate=$(docker inspect -f '{{.State.Status}}' "$name" 2>/dev/null) || cstate="unknown"
+        if [[ "$cstate" == "running" ]]; then
+          die "Failed to capture logs from $name"
+        fi
+        echo ""
+        echo "[container exited, status: $cstate]"
+        break
+      fi
       if [[ "$output" != "$last_output" ]]; then
         printf '\033[2J\033[H'
         printf '%s' "$output"
