@@ -61,7 +61,7 @@ Everything not in the allowlist. This includes:
 - **No Docker socket:** The container cannot access the Docker daemon and cannot manage other containers
 - **SSH access:** Ed25519 keypair generated on the host; public key mounted read-only as `/home/claude/.ssh/authorized_keys`; password authentication disabled in `sshd_config`
 - **Capabilities:** `NET_ADMIN` and `NET_RAW` are granted solely to enable iptables/ipset firewall setup; no other extra capabilities are added
-- **Sudo scope:** Two sudoers rules — `claude ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh` restricts firewall execution to that single script path; the entrypoint also runs `sshd` and config copy steps via sudo during startup
+- **Sudo:** The `claude` user has `NOPASSWD: ALL` sudo access. This is needed by the entrypoint to run `sshd`, copy read-only mounts, and initialize the firewall. A narrower sudoers rule could be considered in the future.
 
 ## Firewall verification
 

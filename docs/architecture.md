@@ -22,7 +22,7 @@ Three-layer architecture:
 | `src/commands/logs.ts` | Runs `tmux capture-pane -t claude -p -S -200` via `execInContainer`; optional 2-second polling loop with screen-clear on change |
 | `src/commands/build.ts` | Tar-streams the `docker/` directory to the Docker build API |
 | `src/commands/stop.ts` | Graceful container stop (ignores 304 "already stopped") |
-| `src/commands/rm.ts` | Container removal with `force: true` |
+| `src/commands/rm.ts` | Container removal; requires `--force` to remove running containers |
 
 ### Lib
 
