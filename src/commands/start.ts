@@ -20,6 +20,10 @@ export default class Start extends Command {
       char: 'i',
       description: 'GitHub issue number to fetch as context',
     }),
+    'allow-domain': Flags.string({
+      description: 'Extra domain to allow through the container firewall (repeatable)',
+      multiple: true,
+    }),
     name: Flags.string({
       description: 'Container name (auto-generated if omitted)',
     }),

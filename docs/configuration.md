@@ -13,6 +13,7 @@ The file is not required. If absent, defaults are used. When the file exists, ke
 | `image` | string | `claude-sandbox:latest` | Docker image tag to use for new containers |
 | `sshPortRange` | [number, number] | `[2200, 2299]` | Port range scanned when allocating an SSH port |
 | `defaultBranchPrefix` | string | `claude/` | Prefix prepended to auto-generated branch names (used when `--create-pr` is set and `--branch` is omitted) |
+| `allowedDomains` | string[] | `[]` | Extra domains to allow through the container firewall (fully qualified domain names only — no IPs, CIDRs, or URLs). Additive with `--allow-domain` flag and the hardcoded defaults |
 | `githubPat` | string | (none) | GitHub Personal Access Token; overrides `gh auth token` when set |
 
 Example `~/.claude-sandbox/config.json`:
@@ -22,7 +23,8 @@ Example `~/.claude-sandbox/config.json`:
   "image": "my-org/claude-sandbox:v2",
   "sshPortRange": [3200, 3299],
   "defaultBranchPrefix": "ai/",
-  "githubPat": "ghp_..."
+  "githubPat": "ghp_...",
+  "allowedDomains": ["registry.internal.company.com", "artifactory.myorg.net"]
 }
 ```
 
@@ -36,6 +38,7 @@ Example `~/.claude-sandbox/config.json`:
 | `--pr` | | integer | no | GitHub PR number; content is fetched and appended to the prompt |
 | `--branch` | `-b` | string | no | Branch to create or checkout inside the container |
 | `--create-pr` | | boolean | no | Create a PR when Claude finishes (default: false) |
+| `--allow-domain` | | string | no | Extra domain to allow through the container firewall (repeatable; additive with `allowedDomains` config) |
 | `--name` | | string | no | Container name; auto-generated from repo and a random adjective-noun pair if omitted |
 
 At least one of `--prompt`, `--issue`, or `--pr` is required.
@@ -51,6 +54,7 @@ When `--create-pr` is set and `--branch` is omitted, a branch name is generated 
 | `GITHUB_TOKEN` | Config or `gh auth token` | Authentication token for git and `gh` CLI |
 | `BRANCH` | `--branch` or auto-generated | Branch name; only set when a branch is configured |
 | `CREATE_PR` | `--create-pr` flag | `true` or `false`; instructs the entrypoint whether to open a PR |
+| `EXTRA_ALLOWED_DOMAINS` | `allowedDomains` config + `--allow-domain` flag | Comma-separated list of extra domains to allow through the firewall; resolved via `dig` at container startup |
 
 ## Docker labels
 
