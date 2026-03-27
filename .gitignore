@@ -13,3 +13,5 @@ oclif.manifest.json
 yarn.lock
 pnpm-lock.yaml
 
+docs/superpowers/
+
