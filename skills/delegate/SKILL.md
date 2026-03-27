@@ -32,7 +32,7 @@ Extract the task targets from the user's request:
 | "issue 42", "issue #42", "#42" (in issue context) | Use `--issue 42` |
 | "PR 15", "pull request #15" | Use `--pr 15` |
 | Freeform task description | Use `--prompt "..."` |
-| Multiple targets ("issues 12, 15, 23") | Launch one sandbox per target |
+| Multiple targets ("issues 12, 15, 23") | Use `--issue 12 --issue 15 --issue 23` |
 
 ## Step 2: Resolve Repo
 
@@ -49,55 +49,59 @@ Strip any trailing `.git`.
 
 ## Step 3: Launch
 
-Construct and run the command:
+Use the `run` command which handles concurrent spawning and outputs monitor subagent instructions:
+
 ```bash
-${CLAUDE_PLUGIN_ROOT}/bin/run.js start --repo <org/repo> [--issue N | --pr N | --prompt "..."] [--create-pr] [--name <name>]
+${CLAUDE_PLUGIN_ROOT}/bin/run.js run --repo <org/repo> [--issue N ...] [--pr N ...] [--prompt "..."] [--create-pr] [--name <name>]
 ```
 
 Rules:
 - Add `--create-pr` by default for issue-based tasks. Do NOT add it for PR reviews.
-- Always pass `--name` with a short, descriptive slug for the task (e.g., `--name fix-auth-bug`, `--name add-allowlist`). If the user specified a name, use that instead.
-- For **multiple targets**, launch each sandbox in parallel using separate Bash calls or the dispatching-parallel-agents skill.
+- For single targets, pass `--name` with a short, descriptive slug (e.g., `--name fix-auth-bug`).
+- Multiple `--issue` or `--pr` flags spawn parallel containers automatically.
+- `--branch` and `--name` can only be used with a single target.
 
-After each successful launch, **always** print:
+## Step 4: Launch Monitor Subagents
+
+After a successful `run` command, parse the JSON monitor instructions from the output (lines after `--- MONITOR SUBAGENT INSTRUCTIONS ---`). Each line is a JSON object with `containerName` and `prompt` fields.
+
+For each monitor instruction, launch a background subagent:
 ```
-To SSH into the container: ${CLAUDE_PLUGIN_ROOT}/bin/run.js attach <name>
+Agent tool:
+  description: "Monitor container <containerName>"
+  run_in_background: true
+  prompt: <the prompt field from the JSON>
 ```
 
-## Step 4: Monitor
+The monitor subagent will:
+- Poll container logs every ~10 seconds
+- Identify and report milestone events (repo cloned, tests passing/failing, commits, PRs created)
+- Detect completion via `.claude-done` marker file
+- Report final status and ask whether to keep or clean up the container
 
-After launching, poll for completion. Use a background Bash command or periodic checks:
+## Step 5: Handle Completion
+
+When a monitor subagent reports completion and asks "keep or clean up?":
+
+- **Clean up:** Run `${CLAUDE_PLUGIN_ROOT}/bin/run.js stop <name> && ${CLAUDE_PLUGIN_ROOT}/bin/run.js rm <name>`
+- **Keep:** Do nothing — container stays running for inspection via `attach`
+
+## Fallback: Manual Monitoring
+
+If subagent monitoring fails or isn't available, fall back to manual polling:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/bin/run.js logs <name>
 ```
 
-**What to look for:**
+Poll every ~30 seconds. Look for:
 
 | Log pattern | Meaning | Action |
 |-------------|---------|--------|
-| `=== Session complete.` | Claude finished | Report completion to user |
-| `=== Claude exited with code 0 ===` | Success | Report success, include branch/PR info from logs |
-| `=== Claude exited with code` (non-zero) | Failure | Report failure, suggest user inspect with attach |
+| `=== Claude exited with code 0 ===` | Success | Report success, include branch/PR info |
+| `=== Claude exited with code` (non-zero) | Failure | Report failure, suggest `attach` to inspect |
 | `Creating pull request...` | PR was created | Capture and report the PR URL |
-| `WARNING: push failed` | Push failed | Alert user |
-| `WARNING: PR creation failed` | PR creation failed | Alert user |
-| Claude appears to be asking a question or waiting | Needs input | Alert user: "The sandbox appears to need input. Attach to interact." |
-
-**Polling cadence:**
-- Check every ~30 seconds
-- If the container is no longer running (check `ls` command), stop polling and report final status
-
-**For multiple sandboxes:** Track and poll each independently. Report status as each finishes.
-
-## Step 5: Report
-
-When a sandbox completes, summarize:
-- Exit status (success/failure)
-- Branch name (from logs)
-- PR link if one was created
-- Any warnings from the logs
-- Remind user they can inspect with the `attach` command if needed
+| Claude appears to be asking a question | Needs input | Alert user to `attach` |
 
 ## Error Handling
 
@@ -105,4 +109,4 @@ When a sandbox completes, summarize:
 - **Plugin broken:** Tell user to check plugin installation.
 - **Container fails to start:** Show the full CLI error output. Suggest `docker ps` to check Docker.
 - **Container stops unexpectedly:** Report and suggest using `logs` and `attach` commands.
-- **Polling fails:** If logs fail (e.g., container removed), stop polling and report.
+- **Monitor subagent crashes:** Container keeps running. User can manually check with `logs` or `attach`.
