@@ -43,9 +43,8 @@ if [ -n "${BRANCH:-}" ]; then
     git checkout -b "${BRANCH}" 2>/dev/null || git checkout "${BRANCH}"
 fi
 
-# 8. Launch claude inside tmux via wrapper
-echo "Starting Claude in tmux session..."
-tmux new-session -d -s claude /usr/local/bin/claude-wrapper.sh
+# 8. Launch claude wrapper in background, logging output
+/usr/local/bin/claude-wrapper.sh > /workspace/.claude-log 2>&1 &
 
 echo "=== Claude Sandbox ready ==="
 echo "Container will stay alive for SSH access."
