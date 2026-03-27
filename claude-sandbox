@@ -145,6 +145,11 @@ build_prompt() {
   fi
   parts+=("$workflow")
 
+  # Progress update instructions
+  local progress
+  progress=$'\n---\n## Progress updates\n\nAs you work, write progress updates to /workspace/.claude-progress by appending lines in this format:\n@@UPDATE("brief description of what you just did or are about to do")\n\nWrite an update after each significant milestone: setting up the workspace, running tests, making commits, creating PRs, encountering errors, etc. These updates are monitored by an external process to track your progress.'
+  parts+=("$progress")
+
   local IFS=$'\n'
   printf '%s\n' "${parts[*]}"
 }
