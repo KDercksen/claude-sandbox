@@ -398,6 +398,16 @@ cmd_run() {
     extra_domains_str=$(IFS=,; echo "${extra_domains[*]}")
   fi
 
+  # Interactive mode: launch container without Claude, print attach command
+  if [[ "$interactive" == "true" ]]; then
+    local container_name
+    container_name=$(spawn_interactive_container "$repo" "$branch" "$name" "$extra_domains_str")
+    echo "Container started: $container_name"
+    echo "Attach with:"
+    echo "  docker exec -it $container_name claude --dangerously-skip-permissions"
+    return
+  fi
+
   echo "Spawning ${#target_types[@]} container$([ ${#target_types[@]} -gt 1 ] && echo s)..."
 
   local -a spawned_names=()
