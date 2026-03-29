@@ -238,6 +238,54 @@ spawn_container() {
   printf '%s\t%s\t%s\n' "$container_name" "$repo" "$branch"
 }
 
+spawn_interactive_container() {
+  local repo="$1" branch="${2:-}" name="${3:-}" extra_domains="${4:-}"
+
+  local container_name
+  container_name=$(generate_container_name "$repo" "$name")
+
+  # Merge config allowed domains with extra domains
+  local all_domains="$CONFIG_ALLOWED_DOMAINS"
+  if [[ -n "$extra_domains" ]]; then
+    if [[ -n "$all_domains" ]]; then
+      all_domains="${all_domains},${extra_domains}"
+    else
+      all_domains="$extra_domains"
+    fi
+  fi
+
+  local github_token
+  github_token=$(resolve_github_token)
+
+  local -a docker_args=(
+    run -d
+    --name "$container_name"
+    --label "app=claude-sandbox"
+    --label "claude-sandbox.repo=$repo"
+    --cap-add NET_ADMIN
+    --cap-add NET_RAW
+    -v "${HOME}/.claude:/home/claude/.claude.host:ro"
+    -v "${HOME}/.claude.json:/home/claude/.claude.json.host:ro"
+    -e "REPO=${repo}"
+    -e "GITHUB_TOKEN=${github_token}"
+    -e "INTERACTIVE=true"
+  )
+
+  if [[ -n "$branch" ]]; then
+    docker_args+=(-e "BRANCH=${branch}")
+  fi
+
+  if [[ -n "$all_domains" ]]; then
+    docker_args+=(-e "EXTRA_ALLOWED_DOMAINS=${all_domains}")
+  fi
+
+  docker_args+=("$CONFIG_IMAGE")
+
+  docker "${docker_args[@]}" >/dev/null || die "Failed to start container $container_name"
+
+  echo "$container_name"
+}
+
 # --- Commands ---
 
 build_monitor_prompt() {
@@ -275,7 +323,7 @@ MONITOR
 }
 
 cmd_run() {
-  local repo="" prompt="" branch="" name="" create_pr="false"
+  local repo="" prompt="" branch="" name="" create_pr="false" interactive="false"
   local -a issues=()
   local -a prs=()
   local -a extra_domains=()
@@ -290,12 +338,30 @@ cmd_run() {
       --name) name="${2:?--name requires a value}"; shift 2 ;;
       --create-pr) create_pr="true"; shift ;;
       --allow-domain) extra_domains+=("${2:?--allow-domain requires a value}"); shift 2 ;;
+      --interactive) interactive="true"; shift ;;
       -*) die "Unknown flag: $1" ;;
       *) die "Unexpected argument: $1" ;;
     esac
   done
 
-  [[ -n "$repo" ]] || die "--repo is required"
+  # Validate --interactive exclusivity
+  if [[ "$interactive" == "true" ]]; then
+    if [[ -n "$prompt" || ${#issues[@]} -gt 0 || ${#prs[@]} -gt 0 || "$create_pr" == "true" ]]; then
+      die "--interactive cannot be combined with --prompt, --issue, --pr, or --create-pr"
+    fi
+  fi
+
+  # Resolve repo
+  if [[ -z "$repo" ]]; then
+    if [[ "$interactive" == "true" ]]; then
+      local remote_url
+      remote_url=$(git remote get-url origin 2>/dev/null) || die "No --repo specified and no git remote found"
+      repo=$(echo "$remote_url" | sed -E 's#.*github\.com[:/]##; s/\.git$//')
+      [[ -n "$repo" ]] || die "Could not parse repo from remote URL: $remote_url"
+    else
+      die "--repo is required"
+    fi
+  fi
 
   # Build target list
   local -a target_types=()
@@ -314,7 +380,9 @@ cmd_run() {
     target_values+=("$p")
   done
 
-  [[ ${#target_types[@]} -gt 0 ]] || die "Provide at least one of --prompt, --issue, or --pr"
+  if [[ "$interactive" != "true" ]]; then
+    [[ ${#target_types[@]} -gt 0 ]] || die "Provide at least one of --prompt, --issue, or --pr"
+  fi
 
   # Validate single-container flags
   if [[ ${#target_types[@]} -gt 1 && (-n "$branch" || -n "$name") ]]; then
@@ -327,6 +395,16 @@ cmd_run() {
   local extra_domains_str=""
   if [[ ${#extra_domains[@]} -gt 0 ]]; then
     extra_domains_str=$(IFS=,; echo "${extra_domains[*]}")
+  fi
+
+  # Interactive mode: launch container without Claude, print attach command
+  if [[ "$interactive" == "true" ]]; then
+    local container_name
+    container_name=$(spawn_interactive_container "$repo" "$branch" "$name" "$extra_domains_str")
+    echo "Container started: $container_name"
+    echo "Attach with:"
+    echo "  docker exec -it $container_name claude --dangerously-skip-permissions"
+    return
   fi
 
   echo "Spawning ${#target_types[@]} container$([ ${#target_types[@]} -gt 1 ] && echo s)..."
@@ -411,8 +489,19 @@ usage() {
 Usage: claude-sandbox <command> [options]
 
 Commands:
-  run         Start containers with monitor subagent instructions
+  run         Start containers (autonomous or interactive mode)
   build       Build the Docker image
+
+Run flags:
+  --repo <org/repo>         GitHub repo (auto-detected in interactive mode)
+  --interactive             Launch container without starting Claude
+  --prompt "text"           Freeform prompt (autonomous only)
+  --issue <N>               GitHub issue number (autonomous only, repeatable)
+  --pr <N>                  GitHub PR number (autonomous only, repeatable)
+  --create-pr               Auto-create PR (autonomous only)
+  --branch <name>           Git branch (single target only)
+  --name <name>             Custom container name (single target only)
+  --allow-domain <domain>   Extra allowed network domains (repeatable)
 
 Container management uses docker directly:
   docker ps -a --filter label=app=claude-sandbox    List containers

@@ -40,8 +40,10 @@ if [ -n "${BRANCH:-}" ]; then
     git checkout -b "${BRANCH}" 2>/dev/null || git checkout "${BRANCH}"
 fi
 
-# 7. Launch claude wrapper in background, logging output
-/usr/local/bin/claude-wrapper.sh > /workspace/.claude-log 2>&1 &
+# 7. Launch claude wrapper in background (skip in interactive mode)
+if [ "${INTERACTIVE:-}" != "true" ]; then
+    /usr/local/bin/claude-wrapper.sh > /workspace/.claude-log 2>&1 &
+fi
 
 echo "=== Claude Sandbox ready ==="
 echo "Container will stay alive for docker exec access."
