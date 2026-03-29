@@ -78,6 +78,31 @@ docker_dir_hash() {
 
 ensure_image() {
   local tag="$CONFIG_IMAGE"
+
+  # External image mode: pullPolicy is set, skip auto-build
+  if [[ -n "$CONFIG_PULL_POLICY" ]]; then
+    case "$CONFIG_PULL_POLICY" in
+      always)
+        echo "Pulling image $tag..."
+        docker pull "$tag" || die "Failed to pull image $tag"
+        echo "Image $tag ready."
+        ;;
+      if-not-present)
+        if docker image inspect "$tag" >/dev/null 2>&1; then
+          return
+        fi
+        echo "Image $tag not found locally, pulling..."
+        docker pull "$tag" || die "Failed to pull image $tag"
+        echo "Image $tag ready."
+        ;;
+      never)
+        docker image inspect "$tag" >/dev/null 2>&1 || die "Image $tag not found locally and pullPolicy is \"never\""
+        ;;
+    esac
+    return
+  fi
+
+  # Auto-build mode: build from docker/ directory
   local current_hash
   current_hash=$(docker_dir_hash)
 
