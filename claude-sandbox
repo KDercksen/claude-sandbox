@@ -276,7 +276,7 @@ MONITOR
 }
 
 cmd_run() {
-  local repo="" prompt="" branch="" name="" create_pr="false"
+  local repo="" prompt="" branch="" name="" create_pr="false" interactive="false"
   local -a issues=()
   local -a prs=()
   local -a extra_domains=()
@@ -291,12 +291,30 @@ cmd_run() {
       --name) name="${2:?--name requires a value}"; shift 2 ;;
       --create-pr) create_pr="true"; shift ;;
       --allow-domain) extra_domains+=("${2:?--allow-domain requires a value}"); shift 2 ;;
+      --interactive) interactive="true"; shift ;;
       -*) die "Unknown flag: $1" ;;
       *) die "Unexpected argument: $1" ;;
     esac
   done
 
-  [[ -n "$repo" ]] || die "--repo is required"
+  # Validate --interactive exclusivity
+  if [[ "$interactive" == "true" ]]; then
+    if [[ -n "$prompt" || ${#issues[@]} -gt 0 || ${#prs[@]} -gt 0 || "$create_pr" == "true" ]]; then
+      die "--interactive cannot be combined with --prompt, --issue, --pr, or --create-pr"
+    fi
+  fi
+
+  # Resolve repo
+  if [[ -z "$repo" ]]; then
+    if [[ "$interactive" == "true" ]]; then
+      local remote_url
+      remote_url=$(git remote get-url origin 2>/dev/null) || die "No --repo specified and no git remote found"
+      repo=$(echo "$remote_url" | sed -E 's#.*github\.com[:/]##; s/\.git$//')
+      [[ -n "$repo" ]] || die "Could not parse repo from remote URL: $remote_url"
+    else
+      die "--repo is required"
+    fi
+  fi
 
   # Build target list
   local -a target_types=()
@@ -315,7 +333,9 @@ cmd_run() {
     target_values+=("$p")
   done
 
-  [[ ${#target_types[@]} -gt 0 ]] || die "Provide at least one of --prompt, --issue, or --pr"
+  if [[ "$interactive" != "true" ]]; then
+    [[ ${#target_types[@]} -gt 0 ]] || die "Provide at least one of --prompt, --issue, or --pr"
+  fi
 
   # Validate single-container flags
   if [[ ${#target_types[@]} -gt 1 && (-n "$branch" || -n "$name") ]]; then
