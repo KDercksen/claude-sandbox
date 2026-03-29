@@ -16,6 +16,7 @@ CONFIG_IMAGE="claude-sandbox:latest"
 CONFIG_BRANCH_PREFIX="claude/"
 CONFIG_GITHUB_PAT=""
 CONFIG_ALLOWED_DOMAINS=""
+CONFIG_PULL_POLICY=""
 
 load_config() {
   if [[ -f "$CONFIG_FILE" ]]; then
@@ -23,6 +24,10 @@ load_config() {
     CONFIG_BRANCH_PREFIX=$(jq -r '.defaultBranchPrefix // "claude/"' "$CONFIG_FILE")
     CONFIG_GITHUB_PAT=$(jq -r '.githubPat // empty' "$CONFIG_FILE")
     CONFIG_ALLOWED_DOMAINS=$(jq -r '(.allowedDomains // []) | join(",")' "$CONFIG_FILE")
+    CONFIG_PULL_POLICY=$(jq -r '.pullPolicy // empty' "$CONFIG_FILE")
+    if [[ -n "$CONFIG_PULL_POLICY" ]] && [[ "$CONFIG_PULL_POLICY" != "always" && "$CONFIG_PULL_POLICY" != "if-not-present" && "$CONFIG_PULL_POLICY" != "never" ]]; then
+      die "Invalid pullPolicy \"$CONFIG_PULL_POLICY\". Must be one of: always, if-not-present, never"
+    fi
   fi
 }
 
