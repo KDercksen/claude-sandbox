@@ -125,23 +125,22 @@ build_prompt() {
 
   # Default instruction if no explicit prompt
   if [[ -z "$prompt" ]]; then
-    parts=("Resolve the following. Make the necessary code changes, ensure tests pass, and commit your work." "${parts[@]}")
+    parts=("Resolve the following." "${parts[@]}")
   fi
 
-  # Git workflow instructions
-  local workflow
-  workflow=$'\n---\n## Git workflow\n\n- Make small, focused commits as you go — one per logical change. Use descriptive commit messages.'
+  # Load prompt template and fill conditional placeholders
+  local template
+  template=$(cat "$SCRIPT_DIR/prompt-template.md") || die "Failed to read prompt-template.md"
+
   if [[ "$create_pr" == "true" ]]; then
-    workflow+=$'\n- When you are done, push your branch and create a PR with a clear title and description summarizing what changed and why.'
+    template="${template//\{\{COMPLETION_PR_ITEM\}\}/- [ ] PR created with clear title and description summarizing what and why}"
+    template="${template//\{\{GIT_WORKFLOW_SUFFIX\}\}/- When you are done, push your branch and create a PR with a clear title and description summarizing what changed and why.}"
   else
-    workflow+=$'\n- When you are done, commit your work. The branch will be pushed automatically.'
+    template="${template//\{\{COMPLETION_PR_ITEM\}\}/}"
+    template="${template//\{\{GIT_WORKFLOW_SUFFIX\}\}/- When you are done, commit your work. The branch will be pushed automatically.}"
   fi
-  parts+=("$workflow")
 
-  # Progress update instructions
-  local progress
-  progress=$'\n---\n## Progress updates\n\nAs you work, append progress lines to /workspace/.claude-progress using these markers:\n\n@@PHASE("name") — emit when you transition to a new phase of work. Suggested phases:\n  exploring codebase, setting up environment, brainstorming design, writing tests,\n  implementing, debugging, reviewing, creating pr\n\n@@UPDATE("detail") — emit after each significant action. Include what you did,\n  what skill or approach you are using, and any subagents you spawned. Examples:\n    @@UPDATE("Using TDD — writing failing tests for auth module")\n    @@UPDATE("Spawned 3 subagents for parallel implementation")\n    @@UPDATE("All 8 tests passing, moving to integration tests")\n    @@UPDATE("Installing npm dependencies — found package.json with 12 deps")\n\n@@ARTIFACT("type: description") — emit when you produce a concrete output.\n  Types: commit, pr, file, test. Examples:\n    @@ARTIFACT("commit: Add failing tests for user authentication")\n    @@ARTIFACT("pr: https://github.com/org/repo/pull/42")\n    @@ARTIFACT("test: 8 passing, 0 failing")\n\nStart with @@PHASE("exploring codebase") as your first line. Update phases as your work evolves.'
-  parts+=("$progress")
+  parts+=($'\n---\n'"$template")
 
   local IFS=$'\n'
   printf '%s\n' "${parts[*]}"

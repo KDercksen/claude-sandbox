@@ -12,9 +12,19 @@ claude -p --dangerously-skip-permissions "${PROMPT}"
 EXIT_CODE=$?
 set -e
 
-# Write completion phase
+# Write completion phase and verify work quality
 echo '@@PHASE("finishing")' >> /workspace/.claude-progress
 echo "@@ARTIFACT(\"exit: ${EXIT_CODE}\")" >> /workspace/.claude-progress
+
+# Completion gate: check if Claude emitted a verification phase
+if ! grep -q '@@PHASE("verification")' /workspace/.claude-progress 2>/dev/null; then
+    echo '@@UPDATE("WARNING: Claude exited without running verification phase")' >> /workspace/.claude-progress
+fi
+
+# Check if tests were reported
+if ! grep -q '@@ARTIFACT("test:' /workspace/.claude-progress 2>/dev/null; then
+    echo '@@UPDATE("WARNING: No test results were reported")' >> /workspace/.claude-progress
+fi
 
 # Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
