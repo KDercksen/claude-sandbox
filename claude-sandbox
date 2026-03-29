@@ -385,6 +385,9 @@ cmd_run() {
 
 cmd_build() {
   load_config
+  if [[ -n "$CONFIG_PULL_POLICY" ]]; then
+    warn "pullPolicy is set — building will overwrite the local tag for \"$CONFIG_IMAGE\""
+  fi
   local tag="$CONFIG_IMAGE"
   while [[ $# -gt 0 ]]; do
     case "$1" in
