@@ -86,6 +86,8 @@ Agent tool:
 The monitor subagent will:
 - Poll container logs every ~10 seconds
 - Identify and report milestone events (repo cloned, tests passing/failing, commits, PRs created)
+- Track work loop phases (exploring → planning → implementing → verifying → reviewing → iterating)
+- Flag if Claude skipped the verification phase or didn't report test results
 - Detect completion via `.claude-done` marker file
 - Report final status and ask whether to keep or clean up the container
 
