@@ -239,6 +239,54 @@ spawn_container() {
   printf '%s\t%s\t%s\n' "$container_name" "$repo" "$branch"
 }
 
+spawn_interactive_container() {
+  local repo="$1" branch="${2:-}" name="${3:-}" extra_domains="${4:-}"
+
+  local container_name
+  container_name=$(generate_container_name "$repo" "$name")
+
+  # Merge config allowed domains with extra domains
+  local all_domains="$CONFIG_ALLOWED_DOMAINS"
+  if [[ -n "$extra_domains" ]]; then
+    if [[ -n "$all_domains" ]]; then
+      all_domains="${all_domains},${extra_domains}"
+    else
+      all_domains="$extra_domains"
+    fi
+  fi
+
+  local github_token
+  github_token=$(resolve_github_token)
+
+  local -a docker_args=(
+    run -d
+    --name "$container_name"
+    --label "app=claude-sandbox"
+    --label "claude-sandbox.repo=$repo"
+    --cap-add NET_ADMIN
+    --cap-add NET_RAW
+    -v "${HOME}/.claude:/home/claude/.claude.host:ro"
+    -v "${HOME}/.claude.json:/home/claude/.claude.json.host:ro"
+    -e "REPO=${repo}"
+    -e "GITHUB_TOKEN=${github_token}"
+    -e "INTERACTIVE=true"
+  )
+
+  if [[ -n "$branch" ]]; then
+    docker_args+=(-e "BRANCH=${branch}")
+  fi
+
+  if [[ -n "$all_domains" ]]; then
+    docker_args+=(-e "EXTRA_ALLOWED_DOMAINS=${all_domains}")
+  fi
+
+  docker_args+=("$CONFIG_IMAGE")
+
+  docker "${docker_args[@]}" >/dev/null || die "Failed to start container $container_name"
+
+  echo "$container_name"
+}
+
 # --- Commands ---
 
 build_monitor_prompt() {
