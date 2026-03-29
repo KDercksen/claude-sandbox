@@ -11,6 +11,7 @@ The file is not required. If absent, defaults are used. When the file exists, ke
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `image` | string | `claude-sandbox:latest` | Docker image tag to use for new containers |
+| `pullPolicy` | string | (none) | Pull policy for external Docker images. When set, skip auto-build and use `image` as an external image. Valid values: `always` (pull every time), `if-not-present` (pull only if not found locally), `never` (error if not found locally). When unset, the image is auto-built from the `docker/` directory |
 | `defaultBranchPrefix` | string | `claude/` | Prefix prepended to auto-generated branch names (used when `--create-pr` is set and `--branch` is omitted) |
 | `allowedDomains` | string[] | `[]` | Extra domains to allow through the container firewall (fully qualified domain names only — no IPs, CIDRs, or URLs). Additive with `--allow-domain` flag and the hardcoded defaults |
 | `githubPat` | string | (none) | GitHub Personal Access Token; overrides `gh auth token` when set |
@@ -25,6 +26,27 @@ Example `~/.claude-sandbox/config.json`:
   "allowedDomains": ["registry.internal.company.com", "artifactory.myorg.net"]
 }
 ```
+
+## Custom images
+
+By default, `claude-sandbox` builds its Docker image from the bundled `docker/` directory and rebuilds automatically when those files change. To use your own image instead, set `pullPolicy` in your config:
+
+```json
+{
+  "image": "ghcr.io/myorg/my-sandbox:latest",
+  "pullPolicy": "if-not-present"
+}
+```
+
+When `pullPolicy` is set, the auto-build is skipped entirely and the `image` value is used as-is.
+
+### Requirements for custom images
+
+Custom images must:
+- Have Claude Code installed and available on `$PATH`
+- Run as a non-root user
+- Include `init-firewall.sh` or equivalent network hardening (or accept the security trade-off)
+- Support the environment variables listed in the "Environment variables passed to containers" section below
 
 ## CLI flags — `run` command
 
