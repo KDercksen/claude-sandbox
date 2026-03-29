@@ -11,7 +11,7 @@ The file is not required. If absent, defaults are used. When the file exists, ke
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `image` | string | `claude-sandbox:latest` | Docker image tag to use for new containers |
-| `pullPolicy` | string | (none) | Pull policy for external Docker images. When set, skip auto-build and use `image` as an external image. Valid values: `always` (pull every time), `if-not-present` (pull only if not found locally), `never` (error if not found locally). When unset, the image is auto-built from the `docker/` directory |
+| `pullPolicy` | string | (none) | Pull policy for the `image` value. Valid values: `always`, `if-not-present`, `never`. When unset, the image is auto-built from `docker/`. See [Custom images](#custom-images) |
 | `defaultBranchPrefix` | string | `claude/` | Prefix prepended to auto-generated branch names (used when `--create-pr` is set and `--branch` is omitted) |
 | `allowedDomains` | string[] | `[]` | Extra domains to allow through the container firewall (fully qualified domain names only — no IPs, CIDRs, or URLs). Additive with `--allow-domain` flag and the hardcoded defaults |
 | `githubPat` | string | (none) | GitHub Personal Access Token; overrides `gh auth token` when set |
