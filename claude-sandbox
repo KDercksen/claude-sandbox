@@ -487,8 +487,19 @@ usage() {
 Usage: claude-sandbox <command> [options]
 
 Commands:
-  run         Start containers with monitor subagent instructions
+  run         Start containers (autonomous or interactive mode)
   build       Build the Docker image
+
+Run flags:
+  --repo <org/repo>         GitHub repo (auto-detected in interactive mode)
+  --interactive             Launch container without starting Claude
+  --prompt "text"           Freeform prompt (autonomous only)
+  --issue <N>               GitHub issue number (autonomous only, repeatable)
+  --pr <N>                  GitHub PR number (autonomous only, repeatable)
+  --create-pr               Auto-create PR (autonomous only)
+  --branch <name>           Git branch (single target only)
+  --name <name>             Custom container name (single target only)
+  --allow-domain <domain>   Extra allowed network domains (repeatable)
 
 Container management uses docker directly:
   docker ps -a --filter label=app=claude-sandbox    List containers
