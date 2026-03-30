@@ -43,7 +43,40 @@ Extract the task targets from the user's request:
 | Freeform task description | Use `--prompt "..."` |
 | Multiple targets ("issues 12, 15, 23") | Use `--issue 12 --issue 15 --issue 23` |
 
-## Step 2: Resolve Repo
+## Step 2: Write a Scoped Prompt
+
+**Always pass `--prompt` with a tightly scoped task description**, even when using `--issue` or `--pr`. The issue/PR body provides context, but the prompt tells the sandboxed Claude exactly what to do and — critically — what *not* to do.
+
+Write the prompt yourself based on the user's request and your understanding of the codebase. Structure it as:
+
+1. **What to do** — a concrete, actionable description of the change (not "resolve the issue" but "add a `--timeout` flag to the `run` command that sets a max duration for container execution")
+2. **Where to look** — point to specific files, functions, or areas of the codebase relevant to the task
+3. **What NOT to do** — explicitly exclude out-of-scope work. Common exclusions:
+   - Do not refactor unrelated code
+   - Do not fix other issues you notice
+   - Do not change the project structure or build system
+   - Do not update documentation beyond what's needed for the change
+
+Example for an issue requesting a new CLI flag:
+```
+Add a --timeout flag to the run command that sets a maximum duration (in minutes)
+for container execution. After the timeout, the container should be stopped and
+cleaned up automatically.
+
+Relevant code:
+- cmd_run() in claude-sandbox (flag parsing and container spawning)
+- spawn_container() for passing the timeout to Docker
+- docker/entrypoint.sh for implementing the timeout mechanism
+
+Do not modify the build command, interactive mode, or monitoring logic.
+Do not refactor existing flag parsing.
+```
+
+If you produced an implementation plan during brainstorming, include it in the prompt. The plan already contains the scoped steps, relevant files, and boundaries — pass it as-is so the sandboxed Claude can execute it directly rather than re-discovering the approach from scratch.
+
+For PR reviews, scope the prompt to reviewing and suggesting changes — not rewriting the PR.
+
+## Step 3: Resolve Repo
 
 Parse the repo from git remote:
 ```bash
@@ -56,7 +89,7 @@ Extract `org/repo` from the URL. Handle both formats:
 
 Strip any trailing `.git`.
 
-## Step 3: Launch
+## Step 4: Launch
 
 Use the `run` command which handles concurrent spawning and outputs monitor subagent instructions:
 
@@ -70,7 +103,7 @@ Rules:
 - Multiple `--issue` or `--pr` flags spawn parallel containers automatically.
 - `--branch` and `--name` can only be used with a single target.
 
-## Step 4: Launch Monitor Subagents
+## Step 5: Launch Monitor Subagents
 
 After a successful `run` command, parse the JSON monitor instructions from the output (lines after `--- MONITOR SUBAGENT INSTRUCTIONS ---`). Each line is a JSON object with `containerName` and `prompt` fields.
 
@@ -91,7 +124,7 @@ The monitor subagent will:
 - Detect completion via `.claude-done` marker file
 - Report final status and ask whether to keep or clean up the container
 
-## Step 5: Handle Completion
+## Step 6: Handle Completion
 
 When a monitor subagent reports completion and asks "keep or clean up?":
 
