@@ -4,8 +4,11 @@ set -euo pipefail
 cd /workspace
 
 # Ensure progress files are gitignored so they don't end up in PRs
-if ! grep -q '.claude-progress' .gitignore 2>/dev/null; then
-  echo -e '\n# claude-sandbox progress tracking\n.claude-progress\n.claude-done\n.claude-log' >> .gitignore
+if ! grep -qF '.claude-progress' .gitignore 2>/dev/null; then
+  if [ -f .gitignore ]; then
+    echo '' >> .gitignore
+  fi
+  printf '# claude-sandbox progress tracking\n.claude-progress\n.claude-done\n.claude-log\n' >> .gitignore
 fi
 
 # Write start marker
@@ -17,14 +20,14 @@ claude -p --dangerously-skip-permissions "${PROMPT}"
 EXIT_CODE=$?
 set -e
 
-# Write completion marker and exit code
-echo '@@FINISH' >> /workspace/.claude-progress
-echo "@@EXIT(${EXIT_CODE})" >> /workspace/.claude-progress
-
 # Completion gate: check if any test-like Bash commands were run
 if ! grep -qE '@@TOOL\("Bash", ".*(test|pytest|jest|vitest|mocha|cargo test|go test|make test)' /workspace/.claude-progress 2>/dev/null; then
     echo '@@WARN("No test commands detected in tool log")' >> /workspace/.claude-progress
 fi
+
+# Write completion marker and exit code
+echo '@@FINISH' >> /workspace/.claude-progress
+echo "@@EXIT(${EXIT_CODE})" >> /workspace/.claude-progress
 
 # Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then

@@ -21,8 +21,10 @@ fi
 # 2b. Inject progress-reporting hook into Claude Code settings
 SETTINGS_FILE="/home/claude/.claude/settings.json"
 if [ -f "$SETTINGS_FILE" ]; then
-  jq '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [{"matcher": "", "command": "/usr/local/bin/progress-hook.sh"}]' \
-    "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+  if ! jq -e '.hooks.PreToolUse[]? | select(.command == "/usr/local/bin/progress-hook.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
+    jq '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [{"matcher": "", "command": "/usr/local/bin/progress-hook.sh"}]' \
+      "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+  fi
 else
   cat > "$SETTINGS_FILE" <<'SETTINGS'
 {

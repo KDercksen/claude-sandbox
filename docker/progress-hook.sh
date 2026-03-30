@@ -4,10 +4,19 @@
 
 PROGRESS_FILE="/workspace/.claude-progress"
 
-# Read JSON from stdin
+# Read and parse JSON from stdin in a single jq call
 input=$(cat)
+if ! echo "$input" | jq empty 2>/dev/null; then
+  exit 0
+fi
 
-tool_name=$(echo "$input" | jq -r '.tool_name // empty')
+eval "$(echo "$input" | jq -r '
+  @sh "tool_name=\(.tool_name // "")",
+  @sh "file_path=\(.tool_input.file_path // "")",
+  @sh "pattern=\(.tool_input.pattern // "")",
+  @sh "glob_pat=\(.tool_input.glob // "")",
+  @sh "command=\(.tool_input.command // "")"
+')"
 
 # Skip if no tool name
 if [ -z "$tool_name" ]; then
@@ -17,28 +26,26 @@ fi
 # Extract a meaningful detail based on tool type
 case "$tool_name" in
   Read|Write|Edit)
-    detail=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+    detail="$file_path"
     ;;
   Grep)
-    pattern=$(echo "$input" | jq -r '.tool_input.pattern // empty')
-    glob=$(echo "$input" | jq -r '.tool_input.glob // empty')
     detail="pattern=${pattern}"
-    if [ -n "$glob" ]; then
-      detail="${detail}, glob=${glob}"
+    if [ -n "$glob_pat" ]; then
+      detail="${detail}, glob=${glob_pat}"
     fi
     ;;
   Glob)
-    detail=$(echo "$input" | jq -r '.tool_input.pattern // empty')
+    detail="$pattern"
     ;;
   Bash)
-    detail=$(echo "$input" | jq -r '.tool_input.command // empty' | head -c 200)
+    detail=$(printf '%.200s' "$command")
     ;;
   *)
-    detail=$(echo "$input" | jq -r '.tool_input | keys[0:2] | join(", ")' 2>/dev/null || echo "")
+    detail=""
     ;;
 esac
 
-# Append tool event
-echo "@@TOOL(\"${tool_name}\", \"${detail}\")" >> "$PROGRESS_FILE"
+# Append tool event (using printf to avoid shell expansion issues)
+printf '@@TOOL("%s", "%s")\n' "$tool_name" "$detail" >> "$PROGRESS_FILE"
 
 exit 0
