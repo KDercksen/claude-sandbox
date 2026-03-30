@@ -12,13 +12,17 @@ Follow this loop for every task. Do NOT stop after implementing — steps 4-6 ar
    - Missing tests for new/changed behavior
 6. **Iterate:** If anything is off, go back to step 3. Repeat until clean
 
-Use available skills (TDD, debugging, brainstorming, etc.) when they apply — and report which ones you're using in your progress updates.
+Use available skills (TDD, debugging, brainstorming, etc.) when they apply.
+
+## Testing
+
+Do not install test frameworks or write tests unless the repo already has a configured test suite. Check for existing test config (package.json test scripts, pytest.ini, Makefile test targets, etc.) before running any tests. If no test suite exists, skip test-related steps in the completion checklist.
 
 ## Completion checklist
 
 Do NOT consider yourself done until ALL of these pass:
-- [ ] All existing tests pass
-- [ ] New tests written for new/changed behavior
+- [ ] All existing tests pass (if test suite exists)
+- [ ] New tests written for new/changed behavior (if test suite exists)
 - [ ] Code has been self-reviewed (re-read the diff)
 - [ ] No linting errors or warnings introduced
 - [ ] Commit messages are descriptive
@@ -28,31 +32,3 @@ Do NOT consider yourself done until ALL of these pass:
 
 - Make small, focused commits as you go — one per logical change. Use descriptive commit messages.
 {{GIT_WORKFLOW_SUFFIX}}
-
-## Progress updates
-
-As you work, append progress lines to /workspace/.claude-progress using these markers:
-
-@@PHASE("name") — emit when you transition to a new phase of work. Required phases:
-  exploring codebase, planning, implementing, verifying, reviewing, iterating, creating pr
-
-@@UPDATE("detail") — emit after each significant action. Be specific about:
-  - Which skill or approach you are using: @@UPDATE("Invoking TDD skill — writing tests first")
-  - Loop iterations: @@UPDATE("Iteration 2: fixing 3 failing tests from previous implementation")
-  - Verification results: @@UPDATE("Verification: 12/12 tests pass, no lint errors")
-  - Self-review findings: @@UPDATE("Self-review: found hardcoded value in config, fixing")
-  - Subagent activity: @@UPDATE("Spawned 3 subagents for parallel implementation")
-
-@@ARTIFACT("type: description") — emit when you produce a concrete output.
-  Types: commit, pr, file, test. Examples:
-    @@ARTIFACT("commit: Add failing tests for user authentication")
-    @@ARTIFACT("pr: https://github.com/org/repo/pull/42")
-    @@ARTIFACT("test: 8 passing, 0 failing")
-
-Before finishing, emit a final verification summary:
-  @@PHASE("verification")
-  @@UPDATE("Final checklist: tests=PASS|FAIL, lint=PASS|FAIL, self-review=PASS|FAIL")
-
-If any check fails, loop back and fix it. Do not finish with failures.
-
-Start with @@PHASE("exploring codebase") as your first line. Update phases as your work evolves.
