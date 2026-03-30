@@ -19,7 +19,11 @@ if [ -d /home/claude/.claude.host ]; then
 fi
 
 # 2b. Inject progress-reporting hook into Claude Code settings
+#     Handle dangling symlinks (host dotfile symlinks that don't resolve in container)
 SETTINGS_FILE="/home/claude/.claude/settings.json"
+if [ -L "$SETTINGS_FILE" ] && [ ! -e "$SETTINGS_FILE" ]; then
+    rm -f "$SETTINGS_FILE"
+fi
 if [ -f "$SETTINGS_FILE" ]; then
   if ! jq -e '.hooks.PreToolUse[]? | select(.command == "/usr/local/bin/progress-hook.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
     jq '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [{"matcher": "", "command": "/usr/local/bin/progress-hook.sh"}]' \
