@@ -3,8 +3,16 @@ set -euo pipefail
 
 cd /workspace
 
+# Ensure progress files are gitignored so they don't end up in PRs
+if ! grep -qF '.claude-progress' .gitignore 2>/dev/null; then
+  if [ -f .gitignore ]; then
+    echo '' >> .gitignore
+  fi
+  printf '# claude-sandbox progress tracking\n.claude-progress\n.claude-done\n.claude-log\n' >> .gitignore
+fi
+
 # Write start marker
-echo '@@PHASE("starting")' >> /workspace/.claude-progress
+echo '@@START' >> /workspace/.claude-progress
 
 # Run Claude in headless mode
 set +e
@@ -12,27 +20,17 @@ claude -p --dangerously-skip-permissions "${PROMPT}"
 EXIT_CODE=$?
 set -e
 
-# Write completion phase and verify work quality
-echo '@@PHASE("finishing")' >> /workspace/.claude-progress
-echo "@@ARTIFACT(\"exit: ${EXIT_CODE}\")" >> /workspace/.claude-progress
-
-# Completion gate: check if Claude emitted a verification phase
-if ! grep -q '@@PHASE("verification")' /workspace/.claude-progress 2>/dev/null; then
-    echo '@@UPDATE("WARNING: Claude exited without running verification phase")' >> /workspace/.claude-progress
-fi
-
-# Check if tests were reported
-if ! grep -q '@@ARTIFACT("test:' /workspace/.claude-progress 2>/dev/null; then
-    echo '@@UPDATE("WARNING: No test results were reported")' >> /workspace/.claude-progress
+# Completion gate: check if any test-like Bash commands were run
+if ! grep -qE '@@TOOL\("Bash", ".*(test|pytest|jest|vitest|mocha|cargo test|go test|make test)' /workspace/.claude-progress 2>/dev/null; then
+    echo '@@WARN("No test commands detected in tool log")' >> /workspace/.claude-progress
 fi
 
 # Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
-    echo '@@UPDATE("Committing leftover uncommitted changes")' >> /workspace/.claude-progress
+    echo '@@WARN("Committing leftover uncommitted changes")' >> /workspace/.claude-progress
     git add -A
     COMMIT_MSG="claude-sandbox: uncommitted changes from session"
     git commit -m "$COMMIT_MSG" || true
-    echo "@@ARTIFACT(\"commit: ${COMMIT_MSG}\")" >> /workspace/.claude-progress
 fi
 
 # Safety net: push if branch exists but wasn't pushed
@@ -40,10 +38,13 @@ if [ -n "${BRANCH:-}" ]; then
     LOCAL_SHA=$(git rev-parse HEAD)
     REMOTE_SHA=$(git rev-parse "origin/${BRANCH}" 2>/dev/null || echo "none")
     if [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
-        echo '@@UPDATE("Pushing unpushed changes")' >> /workspace/.claude-progress
-        git push -u origin "${BRANCH}" 2>&1 || echo '@@UPDATE("WARNING: push failed")' >> /workspace/.claude-progress
+        git push -u origin "${BRANCH}" 2>&1 || echo '@@WARN("Push failed")' >> /workspace/.claude-progress
     fi
 fi
 
-# Write final completion marker
+# Write completion marker and exit code (after all warnings so monitor sees them)
+echo '@@FINISH' >> /workspace/.claude-progress
+echo "@@EXIT(${EXIT_CODE})" >> /workspace/.claude-progress
+
+# Write final done marker
 echo "${EXIT_CODE}" > /workspace/.claude-done

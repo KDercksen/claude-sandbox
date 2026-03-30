@@ -36,10 +36,12 @@ RUN npm install -g @anthropic-ai/claude-code
 COPY init-firewall.sh /usr/local/bin/init-firewall.sh
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 COPY claude-wrapper.sh /usr/local/bin/claude-wrapper.sh
+COPY progress-hook.sh /usr/local/bin/progress-hook.sh
 
 RUN chmod +x /usr/local/bin/init-firewall.sh \
   /usr/local/bin/entrypoint.sh \
-  /usr/local/bin/claude-wrapper.sh
+  /usr/local/bin/claude-wrapper.sh \
+  /usr/local/bin/progress-hook.sh
 
 
 WORKDIR /workspace

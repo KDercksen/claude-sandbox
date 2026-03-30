@@ -18,6 +18,24 @@ if [ -d /home/claude/.claude.host ]; then
     sudo chown -R claude:claude /home/claude/.claude
 fi
 
+# 2b. Inject progress-reporting hook into Claude Code settings
+#     Handle dangling symlinks (host dotfile symlinks that don't resolve in container)
+SETTINGS_FILE="/home/claude/.claude/settings.json"
+if [ -L "$SETTINGS_FILE" ] && [ ! -e "$SETTINGS_FILE" ]; then
+    rm -f "$SETTINGS_FILE"
+fi
+HOOK_ENTRY='{"matcher":"","hooks":[{"type":"command","command":"/usr/local/bin/progress-hook.sh"}]}'
+if [ -f "$SETTINGS_FILE" ]; then
+  if ! jq -e '.hooks.PreToolUse[]? | .hooks[]? | select(.command == "/usr/local/bin/progress-hook.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
+    jq --argjson hook "$HOOK_ENTRY" '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]' \
+      "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+  fi
+else
+  cat > "$SETTINGS_FILE" <<SETTINGS
+{"hooks":{"PreToolUse":[$HOOK_ENTRY]}}
+SETTINGS
+fi
+
 # 3. Configure git credentials using PAT
 git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
 git config --global user.name "Claude Sandbox"
