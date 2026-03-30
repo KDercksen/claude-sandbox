@@ -18,6 +18,26 @@ if [ -d /home/claude/.claude.host ]; then
     sudo chown -R claude:claude /home/claude/.claude
 fi
 
+# 2b. Inject progress-reporting hook into Claude Code settings
+SETTINGS_FILE="/home/claude/.claude/settings.json"
+if [ -f "$SETTINGS_FILE" ]; then
+  jq '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [{"matcher": "", "command": "/usr/local/bin/progress-hook.sh"}]' \
+    "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+else
+  cat > "$SETTINGS_FILE" <<'SETTINGS'
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "",
+        "command": "/usr/local/bin/progress-hook.sh"
+      }
+    ]
+  }
+}
+SETTINGS
+fi
+
 # 3. Configure git credentials using PAT
 git config --global credential.helper '!f() { echo "username=x-access-token"; echo "password=${GITHUB_TOKEN}"; }; f'
 git config --global user.name "Claude Sandbox"
