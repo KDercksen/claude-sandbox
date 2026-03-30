@@ -52,6 +52,7 @@ Container management uses docker directly (see `skills/delegate/SKILL.md` for fu
 - Don't bypass or weaken firewall allowlist rules in the Docker image
 - Don't hardcode GitHub tokens — use config or `gh auth token`
 - Don't mount the Docker socket into containers
+- Don't commit design specs, plans, or other superpowers workflow artifacts — these are gitignored under `docs/superpowers/` and should stay out of the repo
 
 ## Further Reading
 
