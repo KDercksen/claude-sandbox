@@ -25,10 +25,6 @@ if ! grep -qE '@@TOOL\("Bash", ".*(test|pytest|jest|vitest|mocha|cargo test|go t
     echo '@@WARN("No test commands detected in tool log")' >> /workspace/.claude-progress
 fi
 
-# Write completion marker and exit code
-echo '@@FINISH' >> /workspace/.claude-progress
-echo "@@EXIT(${EXIT_CODE})" >> /workspace/.claude-progress
-
 # Safety net: commit any leftover uncommitted changes
 if [ -n "$(git status --porcelain)" ]; then
     echo '@@WARN("Committing leftover uncommitted changes")' >> /workspace/.claude-progress
@@ -45,6 +41,10 @@ if [ -n "${BRANCH:-}" ]; then
         git push -u origin "${BRANCH}" 2>&1 || echo '@@WARN("Push failed")' >> /workspace/.claude-progress
     fi
 fi
+
+# Write completion marker and exit code (after all warnings so monitor sees them)
+echo '@@FINISH' >> /workspace/.claude-progress
+echo "@@EXIT(${EXIT_CODE})" >> /workspace/.claude-progress
 
 # Write final done marker
 echo "${EXIT_CODE}" > /workspace/.claude-done

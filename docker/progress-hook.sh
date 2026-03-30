@@ -45,6 +45,9 @@ case "$tool_name" in
     ;;
 esac
 
+# Escape double quotes in detail to keep @@TOOL format well-structured
+detail="${detail//\"/\\\"}"
+
 # Append tool event (using printf to avoid shell expansion issues)
 printf '@@TOOL("%s", "%s")\n' "$tool_name" "$detail" >> "$PROGRESS_FILE"
 
