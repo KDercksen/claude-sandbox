@@ -3,6 +3,11 @@ set -euo pipefail
 
 cd /workspace
 
+# Ensure progress files are gitignored so they don't end up in PRs
+if ! grep -q '.claude-progress' .gitignore 2>/dev/null; then
+  echo -e '\n# claude-sandbox progress tracking\n.claude-progress\n.claude-done\n.claude-log' >> .gitignore
+fi
+
 # Write start marker
 echo '@@START' >> /workspace/.claude-progress
 

@@ -299,18 +299,26 @@ Keep commands simple — no sh -c, no pipes, no subshells, no quoted arguments.
 Your job:
 1. Every 10 seconds, poll progress by running:
    docker exec ${container_name} cat /workspace/.claude-progress
-2. Parse the output for three marker types:
-   - @@PHASE("name") — a phase transition. Report as: **Phase: name**
-   - @@UPDATE("detail") — a progress update. Report as a bullet point under the current phase.
-   - @@ARTIFACT("type: description") — a concrete output. Collect these for the completion summary.
-3. Relay only NEW lines you have not already reported. Skip duplicates.
-4. After reading progress, check for completion by running:
+2. Parse the output for these marker types:
+   - @@START — Claude has started working
+   - @@TOOL("name", "detail") — a tool invocation. Infer the current phase from patterns:
+     * Read, Grep, Glob tools → exploring/understanding the codebase
+     * Edit, Write tools → implementing changes
+     * Bash with test/lint commands → verifying/testing
+     * Bash with git commands → committing/pushing
+   - @@WARN("message") — a warning from the completion gates
+   - @@FINISH — Claude has finished working
+   - @@EXIT(code) — the exit code (0 = success)
+3. Report concisely: announce phase transitions when the tool pattern shifts, and mention notable actions (files being edited, tests being run). Do NOT report every single tool call — summarize activity.
+4. Relay only NEW lines you have not already reported. Skip duplicates.
+5. After reading progress, check for completion by running:
    docker exec ${container_name} cat /workspace/.claude-done
    If this succeeds, Claude is done. The output is the exit code. If it fails, Claude is still working.
-5. On completion, report:
+6. On completion, report:
    - Exit code (0 = success)
-   - Phase history (list of phases traversed)
-   - All artifacts produced (commits, PRs, test results)
+   - Phase summary (what phases were observed based on tool patterns)
+   - Key files touched (extracted from tool detail fields)
+   - Any warnings from @@WARN markers
    - Brief summary of the work done
    Then ask the user: "Keep or clean up this container?"
 
