@@ -24,23 +24,15 @@ SETTINGS_FILE="/home/claude/.claude/settings.json"
 if [ -L "$SETTINGS_FILE" ] && [ ! -e "$SETTINGS_FILE" ]; then
     rm -f "$SETTINGS_FILE"
 fi
+HOOK_ENTRY='{"matcher":"","hooks":[{"type":"command","command":"/usr/local/bin/progress-hook.sh"}]}'
 if [ -f "$SETTINGS_FILE" ]; then
-  if ! jq -e '.hooks.PreToolUse[]? | select(.command == "/usr/local/bin/progress-hook.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
-    jq '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [{"matcher": "", "command": "/usr/local/bin/progress-hook.sh"}]' \
+  if ! jq -e '.hooks.PreToolUse[]? | .hooks[]? | select(.command == "/usr/local/bin/progress-hook.sh")' "$SETTINGS_FILE" >/dev/null 2>&1; then
+    jq --argjson hook "$HOOK_ENTRY" '.hooks.PreToolUse = (.hooks.PreToolUse // []) + [$hook]' \
       "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
   fi
 else
-  cat > "$SETTINGS_FILE" <<'SETTINGS'
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "",
-        "command": "/usr/local/bin/progress-hook.sh"
-      }
-    ]
-  }
-}
+  cat > "$SETTINGS_FILE" <<SETTINGS
+{"hooks":{"PreToolUse":[$HOOK_ENTRY]}}
 SETTINGS
 fi
 
