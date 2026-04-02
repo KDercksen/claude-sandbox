@@ -32,18 +32,22 @@ cd claude-sandbox
 ./claude-sandbox build
 ```
 
+Requires Docker, Claude Code, and gh CLI — see [Prerequisites](#prerequisites) below.
+
 ### Run
 
 ```bash
 ./claude-sandbox run --repo owner/repo --issue 42 --create-pr
 ```
 
+Replace `owner/repo` with your target repository.
+
 ## How it works
 
 The CLI fetches issue/PR context, builds a prompt, and spawns an isolated Docker container. Inside, the firewall locks down network access, the repo is cloned, and Claude works autonomously. When done, it commits, pushes, and optionally opens a PR.
 
 ```
-run --issue 42 → build prompt → spawn container → firewall init → clone repo → Claude works → commit & push → create PR
+run --issue 42 -> build prompt -> spawn container -> firewall init -> clone repo -> Claude works -> commit & push -> create PR
 ```
 
 See [Architecture](docs/architecture.md) for the full picture.
@@ -52,10 +56,23 @@ See [Architecture](docs/architecture.md) for the full picture.
 
 | Command | Description |
 |---------|-------------|
-| `run`   | Launch sandbox containers |
+| `run`   | Launch sandbox containers (supports `--issue` and `--pr` flags) |
 | `build` | Build or rebuild the Docker image |
 
 Post-launch container management uses `docker` directly. See `skills/delegate/SKILL.md` for the full reference.
+
+### Post-launch
+
+```bash
+# Monitor progress
+docker exec <container> cat /workspace/.claude-progress
+
+# Shell into the container
+docker exec -it <container> bash
+
+# Clean up
+docker stop <container> && docker rm <container>
+```
 
 ## Configuration
 
